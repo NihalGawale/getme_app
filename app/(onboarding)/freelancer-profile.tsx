@@ -176,12 +176,10 @@ export default function FreelancerProfileScreen() {
             user_id: user.id,
             bio: bio.trim(),
             skills: selectedSkills,
-            whatsapp_number: whatsapp.trim() || null,
-            instagram_handle: instagram.replace("@", "").trim() || null,
             is_published: true,
           },
           {
-            onConflict: "user_id", // ← this is the fix
+            onConflict: "user_id",
           },
         );
 

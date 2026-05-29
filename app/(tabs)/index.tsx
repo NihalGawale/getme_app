@@ -124,14 +124,20 @@ export default function HomeScreen() {
     }
 
     // Enrich with skill names
-    const enriched = (data || []).map((f) => ({
-      ...f,
-      skill_names: (f.skills || [])
-        .map((sid: string) => skills.find((s) => s.id === sid)?.name)
-        .filter(Boolean) as string[],
-    }));
+    const enriched = (data || []).map((f) => {
+      const user = Array.isArray(f.users) ? f.users[0] : f.users;
+      const cities = user?.cities;
+      const city = Array.isArray(cities) ? cities[0] : cities;
+      return {
+        ...f,
+        users: { ...user, cities: city },
+        skill_names: (f.skills || [])
+          .map((sid: string) => skills.find((s) => s.id === sid)?.name)
+          .filter(Boolean) as string[],
+      };
+    });
 
-    setFreelancers(enriched);
+    setFreelancers(enriched as Freelancer[]);
   };
 
   const onRefresh = useCallback(async () => {

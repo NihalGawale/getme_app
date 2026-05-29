@@ -27,6 +27,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fe4b3125-e499-495a-af44-c7c9b07d0f80"
+      }
+    },
+    "owner": "nihalg123"
   }
 }

@@ -75,15 +75,41 @@ export default function OTPScreen() {
     // Step 2 — check if user already exists
     const { data: existingUser } = await supabase
       .from("users")
-      .select("id, role")
+      .select("id, role, name")
       .eq("id", userId)
       .single();
 
     if (existingUser) {
-      // Existing user — go straight to home
-      console.log("Existing user, role:", existingUser.role);
+      console.log(
+        "Existing user, role:",
+        existingUser.role,
+        "name:",
+        existingUser.name,
+      );
       await refreshProfile();
       setLoading(false);
+
+      // Freelancer with no profile — go to profile setup
+      if (existingUser.role === "freelancer") {
+        const { data: fp } = await supabase
+          .from("freelancer_profiles")
+          .select("id")
+          .eq("user_id", userId)
+          .single();
+
+        if (!fp) {
+          router.replace("/(onboarding)/freelancer-profile");
+          return;
+        }
+      }
+
+      // Client with no name — go to details
+      if (existingUser.role === "client" && !existingUser.name) {
+        router.replace("/(onboarding)/client-details");
+        return;
+      }
+
+      // Everything complete
       router.replace("/(tabs)/");
       return;
     }
@@ -92,10 +118,10 @@ export default function OTPScreen() {
     const { error: upsertError } = await supabase.from("users").upsert({
       id: userId,
       phone: userPhone,
-      email: userEmail,
+      email: userEmail || null, // ← convert empty string to null
       role: role || "client",
     });
-
+    
     if (upsertError) {
       setLoading(false);
       Alert.alert("Error", upsertError.message);
@@ -109,7 +135,9 @@ export default function OTPScreen() {
     if (role === "freelancer") {
       router.replace("/(onboarding)/freelancer-profile");
     } else {
-      router.replace("/(tabs)/");
+      // Always send new clients to details screen
+      // index.tsx will handle existing clients with names
+      router.replace("/(onboarding)/client-details");
     }
   };
 
