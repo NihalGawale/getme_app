@@ -8,28 +8,34 @@ import {
   ScrollView,
   Alert,
   Image,
-  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Button from "../../components/ui/Button";
+import Input from "../../components/ui/Input";
+import { Icons } from "../../constants/Icons";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
 
 const DEFAULT_SKILLS = [
-  { id: "", name: "Photography", icon: "📷" },
-  { id: "", name: "Videography", icon: "🎥" },
-  { id: "", name: "Video Editing", icon: "✂️" },
-  { id: "", name: "Graphic Design", icon: "🎨" },
-  { id: "", name: "Drone Operation", icon: "🚁" },
-  { id: "", name: "Voice Over", icon: "🎙️" },
-  { id: "", name: "DJ / Music", icon: "🎵" },
-  { id: "", name: "Copywriting", icon: "✍️" },
-  { id: "", name: "Motion Graphics", icon: "✨" },
-  { id: "", name: "Social Media", icon: "📱" },
+  { id: "", name: "Photography", icon: Icons.photography },
+  { id: "", name: "Videography", icon: Icons.videography },
+  { id: "", name: "Video Editing", icon: Icons.videoEditing },
+  { id: "", name: "Graphic Design", icon: Icons.design },
+  { id: "", name: "Drone Operation", icon: Icons.drone },
+  { id: "", name: "Voice Over", icon: Icons.voiceOver },
+  { id: "", name: "DJ / Music", icon: Icons.music },
+  { id: "", name: "Copywriting", icon: Icons.copywriting },
+  { id: "", name: "Motion Graphics", icon: Icons.motionGraphics },
+  { id: "", name: "Social Media", icon: Icons.socialMedia },
 ];
 
 export default function FreelancerProfileScreen() {
@@ -150,13 +156,11 @@ export default function FreelancerProfileScreen() {
     setLoading(true);
 
     try {
-      // Upload profile photo if selected
       let avatarUrl: string | null = null;
       if (profilePhoto) {
         avatarUrl = await uploadPhotoToCloudinary(profilePhoto);
       }
 
-      // Update users table
       const { error: userError } = await supabase
         .from("users")
         .update({
@@ -168,7 +172,6 @@ export default function FreelancerProfileScreen() {
 
       if (userError) throw userError;
 
-      // Create freelancer profile
       const { error: profileError } = await supabase
         .from("freelancer_profiles")
         .upsert(
@@ -196,13 +199,12 @@ export default function FreelancerProfileScreen() {
 
   return (
     <View style={s.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={s.scroll}
       >
-        {/* Header */}
         <Text style={s.title}>Set up your profile</Text>
         <Text style={s.sub}>
           This is how clients will find and contact you.
@@ -219,7 +221,7 @@ export default function FreelancerProfileScreen() {
             <Image source={{ uri: profilePhoto }} style={s.photo} />
           ) : (
             <View style={s.photoPlaceholder}>
-              <Text style={s.photoIcon}>📷</Text>
+              <Text style={s.photoIcon}>{Icons.photography}</Text>
               <Text style={s.photoText}>Add photo</Text>
             </View>
           )}
@@ -231,22 +233,22 @@ export default function FreelancerProfileScreen() {
           Full name <Text style={s.required}>*</Text>
         </Text>
         <View style={s.nameRow}>
-          <TextInput
-            style={[s.input, { flex: 1 }]}
-            placeholder="First name"
-            placeholderTextColor="#D0D0D0"
-            value={firstName}
-            onChangeText={setFirstName}
-            autoCapitalize="words"
-          />
-          <TextInput
-            style={[s.input, { flex: 1 }]}
-            placeholder="Last name"
-            placeholderTextColor="#D0D0D0"
-            value={lastName}
-            onChangeText={setLastName}
-            autoCapitalize="words"
-          />
+          <View style={{ flex: 1 }}>
+            <Input
+              placeholder="First name"
+              value={firstName}
+              onChangeText={setFirstName}
+              autoCapitalize="words"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input
+              placeholder="Last name"
+              value={lastName}
+              onChangeText={setLastName}
+              autoCapitalize="words"
+            />
+          </View>
         </View>
 
         {/* City */}
@@ -289,7 +291,7 @@ export default function FreelancerProfileScreen() {
                   {city.name}
                 </Text>
                 {selectedCity?.id === city.id && (
-                  <Text style={s.checkmark}>✓</Text>
+                  <Text style={s.checkmark}>{Icons.check}</Text>
                 )}
               </TouchableOpacity>
             ))}
@@ -323,7 +325,6 @@ export default function FreelancerProfileScreen() {
               </Text>
             </TouchableOpacity>
           ))}
-          {/* Add custom skill */}
           <TouchableOpacity
             style={[s.skillTile, showCustomSkill && s.skillTileSelected]}
             onPress={() => setShowCustomSkill(!showCustomSkill)}
@@ -335,21 +336,19 @@ export default function FreelancerProfileScreen() {
         </View>
         {showCustomSkill && (
           <View style={s.customSkillRow}>
-            <TextInput
-              style={[s.input, { flex: 1 }]}
-              placeholder="e.g. Wedding DJ"
-              placeholderTextColor="#D0D0D0"
-              value={customSkill}
-              onChangeText={setCustomSkill}
-              autoCapitalize="words"
-            />
-            <TouchableOpacity
-              style={s.addBtn}
+            <View style={{ flex: 1 }}>
+              <Input
+                placeholder="e.g. Wedding DJ"
+                value={customSkill}
+                onChangeText={setCustomSkill}
+                autoCapitalize="words"
+              />
+            </View>
+            <Button
+              label="Add"
               onPress={addCustomSkill}
-              activeOpacity={0.85}
-            >
-              <Text style={s.addBtnText}>Add</Text>
-            </TouchableOpacity>
+              style={s.addBtn}
+            />
           </View>
         )}
 
@@ -360,7 +359,7 @@ export default function FreelancerProfileScreen() {
         <TextInput
           style={s.textArea}
           placeholder="Tell clients about your experience, style, and what you love doing..."
-          placeholderTextColor="#D0D0D0"
+          placeholderTextColor={Colors.grey300}
           value={bio}
           onChangeText={setBio}
           multiline
@@ -371,58 +370,39 @@ export default function FreelancerProfileScreen() {
         <Text style={s.charCount}>{bio.length}/300</Text>
 
         {/* WhatsApp */}
-        <Text style={s.label}>WhatsApp number</Text>
-        <View style={s.inputRow}>
-          <View style={s.prefix}>
-            <Text style={s.prefixText}>+91</Text>
-          </View>
-          <TextInput
-            style={[s.input, { flex: 1 }]}
-            placeholder="98765 43210"
-            placeholderTextColor="#D0D0D0"
-            keyboardType="phone-pad"
-            value={whatsapp}
-            onChangeText={setWhatsapp}
-            maxLength={10}
-          />
-        </View>
-        <Text style={s.optionalTag}>
-          Optional — clients will contact you directly on WhatsApp
-        </Text>
+        <Input
+          label="WhatsApp number"
+          prefix="+91"
+          placeholder="98765 43210"
+          keyboardType="phone-pad"
+          value={whatsapp}
+          onChangeText={setWhatsapp}
+          maxLength={10}
+          hint="Optional — clients will contact you directly on WhatsApp"
+        />
 
         {/* Instagram */}
-        <Text style={s.label}>Instagram handle</Text>
-        <View style={s.inputRow}>
-          <View style={s.prefix}>
-            <Text style={s.prefixText}>@</Text>
-          </View>
-          <TextInput
-            style={[s.input, { flex: 1 }]}
+        <View style={s.fieldGap}>
+          <Input
+            label="Instagram handle"
+            prefix="@"
             placeholder="yourhandle"
-            placeholderTextColor="#D0D0D0"
             autoCapitalize="none"
             autoCorrect={false}
             value={instagram}
             onChangeText={setInstagram}
+            hint="Optional — clients can view your work on Instagram"
           />
         </View>
-        <Text style={s.optionalTag}>
-          Optional — clients can view your work on Instagram
-        </Text>
 
         {/* Submit */}
-        <TouchableOpacity
-          style={[s.btnPrimary, (!canSubmit || loading) && s.btnDisabled]}
+        <Button
+          label="Create my profile"
           onPress={handleSubmit}
-          activeOpacity={0.85}
-          disabled={!canSubmit || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={s.btnText}>Create my profile</Text>
-          )}
-        </TouchableOpacity>
+          loading={loading}
+          disabled={!canSubmit}
+          style={s.submitBtn}
+        />
 
         <Text style={s.footerNote}>
           You can edit your profile anytime after setup.
@@ -435,162 +415,176 @@ export default function FreelancerProfileScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  scroll: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 20 },
-  title: { fontSize: 22, fontWeight: "500", color: "#111", marginBottom: 8 },
-  sub: { fontSize: 13, color: "#6B6B68", marginBottom: 28, lineHeight: 20 },
-  label: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#111",
-    marginBottom: 8,
-    marginTop: 20,
+  container: { flex: 1, backgroundColor: Colors.white },
+  scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 56, paddingBottom: Spacing.xl },
+  title: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xxl,
+    color: Colors.black,
+    marginBottom: Spacing.sm,
   },
-  labelSub: { fontSize: 11, color: "#6B6B68", marginBottom: 10, marginTop: -4 },
-  required: { color: "#E24B4A" },
-  optionalTag: { fontSize: 11, color: "#D0D0D0", marginTop: 4 },
+  sub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+    marginBottom: 28,
+    lineHeight: 20,
+  },
+  label: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.md,
+    color: Colors.black,
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.xl,
+  },
+  labelSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+    marginBottom: 10,
+    marginTop: -4,
+  },
+  required: { color: Colors.danger },
+  optionalTag: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey300,
+    marginTop: Spacing.xs,
+  },
   charCount: {
-    fontSize: 11,
-    color: "#D0D0D0",
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey300,
     textAlign: "right",
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
 
   // Photo
-  photoWrap: { alignSelf: "center", marginBottom: 4 },
+  photoWrap: { alignSelf: "center", marginBottom: Spacing.xs },
   photo: { width: 88, height: 88, borderRadius: 44 },
   photoPlaceholder: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: "#F4F4F4",
+    backgroundColor: Colors.grey100,
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
+    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: Spacing.xs,
   },
   photoIcon: { fontSize: 24 },
-  photoText: { fontSize: 11, color: "#6B6B68" },
+  photoText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
 
   // Name row
   nameRow: { flexDirection: "row", gap: 10 },
 
-  // Inputs
-  input: {
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111",
-    backgroundColor: "#fff",
-  },
-  inputRow: { flexDirection: "row", gap: 8 },
-  prefix: {
-    width: 48,
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  prefixText: { fontSize: 14, color: "#111", fontWeight: "500" },
+  // Text area (multiline — can't use Input component)
   textArea: {
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111",
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
     minHeight: 100,
   },
 
   // Dropdown
   dropdown: {
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 13,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  dropdownSelected: { fontSize: 14, color: "#111" },
-  dropdownPlaceholder: { fontSize: 14, color: "#D0D0D0" },
-  dropdownArrow: { fontSize: 11, color: "#6B6B68" },
+  dropdownSelected: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  dropdownPlaceholder: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.grey300,
+  },
+  dropdownArrow: { fontSize: FontSize.sm, color: Colors.grey500 },
   dropdownList: {
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    marginTop: 4,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    marginTop: Spacing.xs,
     overflow: "hidden",
-    backgroundColor: "#fff",
+    backgroundColor: Colors.white,
   },
   dropdownItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 0.5,
-    borderBottomColor: "#F4F4F4",
+    borderBottomColor: Colors.grey100,
   },
-  dropdownItemSelected: { backgroundColor: "#F8F8F8" },
-  dropdownItemText: { fontSize: 14, color: "#111" },
-  dropdownItemTextSelected: { fontWeight: "500", color: "#111" },
-  checkmark: { fontSize: 12, color: "#1D9E75", fontWeight: "500" },
+  dropdownItemSelected: { backgroundColor: Colors.grey100 },
+  dropdownItemText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  dropdownItemTextSelected: { fontFamily: FontFamily.medium, color: Colors.black },
+  checkmark: {
+    fontSize: 12,
+    color: Colors.green,
+    fontFamily: FontFamily.medium,
+  },
 
   // Skills
   skillGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   skillTile: {
     width: "30%",
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    padding: 12,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
     alignItems: "center",
     gap: 6,
   },
   skillTileSelected: {
     borderWidth: 1.5,
-    borderColor: "#111",
-    backgroundColor: "#F8F8F8",
+    borderColor: Colors.black,
+    backgroundColor: Colors.grey100,
   },
   skillIcon: { fontSize: 22 },
   skillLabel: {
-    fontSize: 10,
-    color: "#6B6B68",
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    color: Colors.grey500,
     textAlign: "center",
-    fontWeight: "500",
   },
-  skillLabelSelected: { color: "#111" },
-  customSkillRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-  addBtn: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  addBtnText: { color: "#fff", fontSize: 14, fontWeight: "500" },
+  skillLabelSelected: { color: Colors.black },
+  customSkillRow: { flexDirection: "row", gap: Spacing.sm, marginTop: 10 },
+  addBtn: { height: Layout.inputHeight, paddingHorizontal: Spacing.lg },
 
-  // Button
-  btnPrimary: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 28,
-  },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { fontSize: 14, fontWeight: "500", color: "#fff" },
+  // Field gap
+  fieldGap: { marginTop: Spacing.lg },
+
+  // Submit
+  submitBtn: { marginTop: 28 },
   footerNote: {
-    fontSize: 11,
-    color: "#D0D0D0",
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey300,
     textAlign: "center",
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
 });

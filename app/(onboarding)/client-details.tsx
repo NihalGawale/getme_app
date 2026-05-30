@@ -1,20 +1,24 @@
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert,
-  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { Icons } from "../../constants/Icons";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Button from "../../components/ui/Button";
+import Input from "../../components/ui/Input";
 
 export default function ClientDetailsScreen() {
   const router = useRouter();
@@ -56,126 +60,112 @@ export default function ClientDetailsScreen() {
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={s.scroll}
       >
-        {/* Header */}
         <Text style={s.title}>Almost there</Text>
         <Text style={s.sub}>
           Tell us your name so freelancers know who they're talking to.
         </Text>
 
-        {/* First name + Last name */}
         <Text style={s.label}>
           Full name <Text style={s.required}>*</Text>
         </Text>
         <View style={s.nameRow}>
-          <TextInput
-            style={[s.input, { flex: 1 }]}
-            placeholder="First name"
-            placeholderTextColor="#D0D0D0"
-            value={firstName}
-            onChangeText={setFirstName}
-            autoCapitalize="words"
-            autoCorrect={false}
-          />
-          <TextInput
-            style={[s.input, { flex: 1 }]}
-            placeholder="Last name"
-            placeholderTextColor="#D0D0D0"
-            value={lastName}
-            onChangeText={setLastName}
-            autoCapitalize="words"
-            autoCorrect={false}
-          />
+          <View style={{ flex: 1 }}>
+            <Input
+              placeholder="First name"
+              value={firstName}
+              onChangeText={setFirstName}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input
+              placeholder="Last name"
+              value={lastName}
+              onChangeText={setLastName}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+          </View>
         </View>
 
-        {/* Email */}
-        <Text style={s.label}>Email</Text>
-        <TextInput
-          style={s.input}
+        <Input
+          label="Email"
           placeholder="you@example.com"
-          placeholderTextColor="#D0D0D0"
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
+          hint="Optional"
         />
-        <Text style={s.optionalTag}>Optional</Text>
 
-        {/* Note */}
         <View style={s.note}>
-          <Text style={s.noteIcon}>💬</Text>
+          <Text style={s.noteIcon}>{Icons.messages}</Text>
           <Text style={s.noteText}>
             Your name is shown to freelancers when you message them.
           </Text>
         </View>
 
-        {/* Submit */}
-        <TouchableOpacity
-          style={[s.btnPrimary, (!canSubmit || loading) && s.btnDisabled]}
+        <Button
+          label="Continue"
           onPress={handleSubmit}
-          activeOpacity={0.85}
-          disabled={!canSubmit || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={s.btnText}>Continue</Text>
-          )}
-        </TouchableOpacity>
+          loading={loading}
+          disabled={!canSubmit}
+          style={s.submitBtn}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  scroll: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: "500", color: "#111", marginBottom: 8 },
-  sub: { fontSize: 13, color: "#6B6B68", marginBottom: 28, lineHeight: 20 },
+  container: { flex: 1, backgroundColor: Colors.white },
+  scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 60, paddingBottom: 40 },
+  title: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xxl,
+    color: Colors.black,
+    marginBottom: Spacing.sm,
+  },
+  sub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+    marginBottom: 28,
+    lineHeight: 20,
+  },
   label: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#111",
-    marginBottom: 8,
-    marginTop: 20,
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.md,
+    color: Colors.black,
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.xl,
   },
-  required: { color: "#E24B4A" },
-  optionalTag: { fontSize: 11, color: "#D0D0D0", marginTop: 4 },
+  required: { color: Colors.danger },
   nameRow: { flexDirection: "row", gap: 10 },
-  input: {
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 14,
-    color: "#111",
-    backgroundColor: "#fff",
-  },
   note: {
     flexDirection: "row",
-    gap: 8,
-    backgroundColor: "#F4F4F4",
+    gap: Spacing.sm,
+    backgroundColor: Colors.grey100,
     borderRadius: 10,
-    padding: 12,
+    padding: Spacing.md,
     alignItems: "flex-start",
-    marginTop: 20,
+    marginTop: Spacing.xl,
   },
-  noteIcon: { fontSize: 13 },
-  noteText: { fontSize: 12, color: "#6B6B68", flex: 1, lineHeight: 18 },
-  btnPrimary: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 28,
+  noteIcon: { fontSize: FontSize.md },
+  noteText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.grey500,
+    flex: 1,
+    lineHeight: 18,
   },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { fontSize: 14, fontWeight: "500", color: "#fff" },
+  submitBtn: { marginTop: 28 },
 });

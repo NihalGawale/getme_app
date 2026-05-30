@@ -1,10 +1,8 @@
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   StatusBar,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -12,6 +10,13 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Icons } from "../../constants/Icons";
+import { Layout } from "../../constants/Layout";
+import Button from "../../components/ui/Button";
+import Input from "../../components/ui/Input";
 
 export default function PhoneScreen() {
   const router = useRouter();
@@ -53,7 +58,7 @@ export default function PhoneScreen() {
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <View style={s.progress}>
         {[0, 1, 2, 3, 4].map((i) => (
           <View key={i} style={[s.bar, i < 2 && s.barActive]} />
@@ -63,14 +68,10 @@ export default function PhoneScreen() {
       <Text style={s.sub}>
         We'll send a one-time code to verify. No spam, ever.
       </Text>
-      <View style={s.inputRow}>
-        <View style={s.prefix}>
-          <Text style={s.prefixText}>+91</Text>
-        </View>
-        <TextInput
-          style={s.input}
+      <View style={s.inputWrap}>
+        <Input
+          prefix="+91"
           placeholder="98765 43210"
-          placeholderTextColor="#D0D0D0"
           keyboardType="phone-pad"
           value={phone}
           onChangeText={setPhone}
@@ -78,20 +79,18 @@ export default function PhoneScreen() {
         />
       </View>
       <View style={s.note}>
-        <Text style={s.noteIcon}>🔒</Text>
+        <Text style={s.noteIcon}>{Icons.lock}</Text>
         <Text style={s.noteText}>
           Your number is never shown on your public profile.
         </Text>
       </View>
       <View style={{ flex: 1 }} />
-      <TouchableOpacity
-        style={[s.btnPrimary, (phone.length < 10 || loading) && s.btnDisabled]}
+      <Button
+        label="Send OTP"
         onPress={handleSendOTP}
-        activeOpacity={0.85}
-        disabled={phone.length < 10 || loading}
-      >
-        <Text style={s.btnText}>{loading ? "Sending..." : "Send OTP"}</Text>
-      </TouchableOpacity>
+        loading={loading}
+        disabled={phone.length < 10}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -99,52 +98,42 @@ export default function PhoneScreen() {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
+    backgroundColor: Colors.white,
+    paddingHorizontal: Layout.screenPadding,
     paddingTop: 56,
     paddingBottom: 40,
   },
-  progress: { flexDirection: "row", gap: 4, marginBottom: 28 },
-  bar: { flex: 1, height: 3, borderRadius: 99, backgroundColor: "#E8E8E8" },
-  barActive: { backgroundColor: "#111" },
-  title: { fontSize: 20, fontWeight: "500", color: "#111", marginBottom: 8 },
-  sub: { fontSize: 13, color: "#6B6B68", marginBottom: 24, lineHeight: 20 },
-  inputRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  prefix: {
-    width: 52,
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  progress: { flexDirection: "row", gap: Spacing.xs, marginBottom: 28 },
+  bar: { flex: 1, height: 3, borderRadius: Radius.full, backgroundColor: Colors.grey200 },
+  barActive: { backgroundColor: Colors.black },
+  title: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xl,
+    color: Colors.black,
+    marginBottom: Spacing.sm,
   },
-  prefixText: { fontSize: 14, color: "#111", fontWeight: "500" },
-  input: {
-    flex: 1,
-    borderWidth: 0.5,
-    borderColor: "#111",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#111",
+  sub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+    marginBottom: Spacing.xxl,
+    lineHeight: 20,
   },
+  inputWrap: { marginBottom: Spacing.md },
   note: {
     flexDirection: "row",
-    gap: 8,
-    backgroundColor: "#F4F4F4",
-    borderRadius: 8,
-    padding: 12,
+    gap: Spacing.sm,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.sm,
+    padding: Spacing.md,
     alignItems: "flex-start",
   },
-  noteIcon: { fontSize: 13 },
-  noteText: { fontSize: 11, color: "#6B6B68", flex: 1, lineHeight: 17 },
-  btnPrimary: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
+  noteIcon: { fontSize: FontSize.md },
+  noteText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+    flex: 1,
+    lineHeight: 17,
   },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { fontSize: 14, fontWeight: "500", color: "#fff" },
 });

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Image,
   Linking,
-  ActivityIndicator,
   SafeAreaView,
   Alert,
 } from "react-native";
@@ -14,6 +13,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Avatar from "../../components/ui/Avatar";
+import Button from "../../components/ui/Button";
+import LoadingScreen from "../../components/ui/LoadingScreen";
+import Divider from "../../components/ui/Divider";
+import { Icons } from "../../constants/Icons";
 
 type FreelancerProfile = {
   id: string;
@@ -74,7 +82,6 @@ export default function FreelancerProfilePage() {
       return;
     }
 
-    // Fetch skill names
     const { data: skillsData } = await supabase
       .from("skills")
       .select("id, name")
@@ -90,16 +97,6 @@ export default function FreelancerProfilePage() {
       skill_names: (skillsData || []).map((s) => s.name),
     } as FreelancerProfile);
     setLoading(false);
-  };
-
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
   };
 
   const openWhatsApp = (phone: string) => {
@@ -124,7 +121,6 @@ export default function FreelancerProfilePage() {
   const startChat = async () => {
     if (!user || !profile) return;
 
-    // Prevent freelancer from chatting with themselves
     if (user.id === profile.user_id) {
       Alert.alert("This is your profile", "You cannot message yourself.");
       return;
@@ -132,7 +128,6 @@ export default function FreelancerProfilePage() {
 
     setStartingChat(true);
 
-    // Check if conversation already exists
     const { data: existing } = await supabase
       .from("conversations")
       .select("id")
@@ -146,7 +141,6 @@ export default function FreelancerProfilePage() {
       return;
     }
 
-    // Create new conversation
     const { data: newConvo, error } = await supabase
       .from("conversations")
       .insert({
@@ -167,11 +161,7 @@ export default function FreelancerProfilePage() {
   };
 
   if (loading) {
-    return (
-      <View style={s.loadingWrap}>
-        <ActivityIndicator color="#111" size="large" />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   if (!profile) {
@@ -182,12 +172,6 @@ export default function FreelancerProfilePage() {
     );
   }
 
-  const hasContact = !!(
-    profile.whatsapp_number ||
-    profile.instagram_handle ||
-    profile.contact_phone
-  );
-
   return (
     <SafeAreaView style={s.container}>
       {/* Header */}
@@ -197,7 +181,7 @@ export default function FreelancerProfilePage() {
           style={s.backBtn}
           activeOpacity={0.7}
         >
-          <Text style={s.backIcon}>←</Text>
+          <Text style={s.backIcon}>{Icons.back}</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>Profile</Text>
         <View style={{ width: 36 }} />
@@ -209,18 +193,11 @@ export default function FreelancerProfilePage() {
       >
         {/* Avatar + name */}
         <View style={s.profileTop}>
-          {profile.users?.avatar_url ? (
-            <Image
-              source={{ uri: profile.users.avatar_url }}
-              style={s.avatar}
-            />
-          ) : (
-            <View style={s.avatarFallback}>
-              <Text style={s.avatarText}>
-                {getInitials(profile.users?.name ?? "")}
-              </Text>
-            </View>
-          )}
+          <Avatar
+            name={profile.users?.name}
+            uri={profile.users?.avatar_url}
+            size="xl"
+          />
           <Text style={s.name}>{profile.users?.name}</Text>
           <Text style={s.location}>
             {profile.skill_names[0] ?? "Freelancer"} ·{" "}
@@ -228,7 +205,7 @@ export default function FreelancerProfilePage() {
           </Text>
         </View>
 
-        <View style={s.divider} />
+        <Divider />
 
         {/* Bio */}
         {profile.bio ? (
@@ -254,18 +231,15 @@ export default function FreelancerProfilePage() {
 
         {/* Contact buttons */}
         <View style={s.contactSection}>
-          <TouchableOpacity
-            style={s.btnPrimary}
+          <Button
+            label={startingChat ? "Opening..." : `${Icons.messages} Message`}
             onPress={startChat}
-            activeOpacity={0.85}
             disabled={startingChat}
-          >
-            <Text style={s.btnPrimaryText}>
-              {startingChat ? "Opening..." : "💬 Message"}
-            </Text>
-          </TouchableOpacity>
+            loading={startingChat}
+          />
         </View>
-        <View style={s.divider} />
+
+        <Divider />
 
         {/* Portfolio */}
         <View style={s.section}>
@@ -290,24 +264,28 @@ export default function FreelancerProfilePage() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, backgroundColor: Colors.white },
   loadingWrap: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: Colors.white,
   },
-  errorText: { fontSize: 16, color: "#6B6B68" },
+  errorText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.lg,
+    color: Colors.grey500,
+  },
 
   // Header
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: Colors.grey100,
   },
   backBtn: {
     width: 36,
@@ -315,95 +293,99 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  backIcon: { fontSize: 20, color: "#111" },
-  headerTitle: { fontSize: 15, fontWeight: "500", color: "#111" },
+  backIcon: { fontSize: FontSize.xl, color: Colors.black },
+  headerTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    color: Colors.black,
+  },
 
   // Profile top
-  scrollContent: { paddingBottom: 40 },
+  scrollContent: { paddingBottom: Spacing.huge },
   profileTop: {
     alignItems: "center",
     paddingTop: 28,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Layout.screenPadding,
+    gap: Spacing.xs,
   },
-  avatar: { width: 80, height: 80, borderRadius: 40, marginBottom: 12 },
-  avatarFallback: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#F4F4F4",
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
+  name: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xl,
+    color: Colors.black,
+    marginTop: Spacing.md,
   },
-  avatarText: { fontSize: 24, fontWeight: "500", color: "#111" },
-  name: { fontSize: 20, fontWeight: "500", color: "#111", marginBottom: 4 },
-  location: { fontSize: 13, color: "#6B6B68" },
-
-  divider: { height: 0.5, backgroundColor: "#F0F0F0", marginHorizontal: 16 },
+  location: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+  },
 
   // Sections
-  section: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 },
+  section: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xs,
+  },
   sectionLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#6B6B68",
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     marginBottom: 10,
   },
 
   // Bio
-  bioText: { fontSize: 14, color: "#111", lineHeight: 22 },
+  bioText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    lineHeight: 22,
+  },
 
   // Skills
-  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   tag: {
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    borderColor: Colors.border,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 5,
   },
-  tagText: { fontSize: 12, color: "#111" },
+  tagText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.black,
+  },
 
   // Contact buttons
-  contactSection: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 },
-  contactButtons: { gap: 10 },
-  btnPrimary: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
+  contactSection: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xs,
   },
-  btnPrimaryText: { fontSize: 14, fontWeight: "500", color: "#fff" },
-  btnSecondary: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: "center",
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-  },
-  btnSecondaryText: { fontSize: 14, fontWeight: "500", color: "#111" },
 
   // Portfolio
   portfolioGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   portfolioImage: {
     width: "31.5%",
     aspectRatio: 1,
-    borderRadius: 10,
-    backgroundColor: "#F4F4F4",
+    borderRadius: Radius.md,
+    backgroundColor: Colors.grey100,
   },
   noPortfolioWrap: {
-    paddingVertical: 20,
+    paddingVertical: Spacing.xl,
     alignItems: "center",
-    backgroundColor: "#F9F9F9",
-    borderRadius: 10,
+    backgroundColor: Colors.offWhite,
+    borderRadius: Radius.md,
     borderWidth: 0.5,
-    borderColor: "#F0F0F0",
+    borderColor: Colors.grey100,
   },
-  noPortfolioText: { fontSize: 13, color: "#D0D0D0", fontStyle: "italic" },
+  noPortfolioText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey300,
+    fontStyle: "italic",
+  },
 });

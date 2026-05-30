@@ -1,17 +1,16 @@
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-} from "react-native";
+import { View, Text, StyleSheet, StatusBar } from "react-native";
 import { useRouter } from "expo-router";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Button from "../../components/ui/Button";
 
 export default function SplashScreen() {
   const router = useRouter();
   return (
     <View style={s.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <View style={s.top}>
         <View style={s.icon}>
           <Text style={s.iconText}>gm</Text>
@@ -37,20 +36,15 @@ export default function SplashScreen() {
         </View>
       </View>
       <View style={s.bottom}>
-        <TouchableOpacity
-          style={s.btnPrimary}
+        <Button
+          label="Get started"
           onPress={() => router.push("/(auth)/role")}
-          activeOpacity={0.85}
-        >
-          <Text style={s.btnPrimaryText}>Get started</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={s.btnSecondary}
+        />
+        <Button
+          label="I already have an account"
           onPress={() => router.push("/(auth)/phone")}
-          activeOpacity={0.85}
-        >
-          <Text style={s.btnSecondaryText}>I already have an account</Text>
-        </TouchableOpacity>
+          variant="secondary"
+        />
         <Text style={s.terms}>
           By continuing you agree to our Terms & Privacy Policy
         </Text>
@@ -62,78 +56,75 @@ export default function SplashScreen() {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
+    backgroundColor: Colors.white,
+    paddingHorizontal: Layout.screenPadding,
     paddingTop: 60,
     paddingBottom: 40,
     justifyContent: "space-between",
   },
-  top: { alignItems: "center", gap: 20 },
+  top: { alignItems: "center", gap: Spacing.xl },
   icon: {
     width: 64,
     height: 64,
-    backgroundColor: "#111",
-    borderRadius: 16,
+    backgroundColor: Colors.black,
+    borderRadius: Radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },
   iconText: {
+    fontFamily: FontFamily.bold,
     fontSize: 26,
-    fontWeight: "700",
-    color: "#fff",
+    color: Colors.white,
     letterSpacing: -0.5,
   },
   wordmarkRow: { flexDirection: "row" },
   wordBlack: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 42,
-    fontWeight: "700",
-    color: "#111",
+    color: Colors.black,
     letterSpacing: -1.5,
   },
   wordGreen: {
+    fontFamily: FontFamily.displayBold,
     fontSize: 42,
-    fontWeight: "700",
-    color: "#1D9E75",
+    color: Colors.green,
     letterSpacing: -1.5,
   },
   tagline: {
-    fontSize: 13,
-    color: "#6B6B68",
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
     textAlign: "center",
     lineHeight: 20,
   },
-  props: { width: "100%", gap: 8 },
+  props: { width: "100%", gap: Spacing.sm },
   propRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "#F4F4F4",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: Spacing.md,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#1D9E75" },
-  propText: { fontSize: 11, color: "#6B6B68", flex: 1, lineHeight: 18 },
-  bottom: { gap: 12 },
-  btnPrimary: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
+  dot: {
+    width: Spacing.sm,
+    height: Spacing.sm,
+    borderRadius: Spacing.xs,
+    backgroundColor: Colors.green,
   },
-  btnPrimaryText: { fontSize: 14, fontWeight: "500", color: "#fff" },
-  btnSecondary: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: "center",
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
+  propText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+    flex: 1,
+    lineHeight: 18,
   },
-  btnSecondaryText: { fontSize: 14, fontWeight: "500", color: "#111" },
+  bottom: { gap: Spacing.md },
   terms: {
-    fontSize: 10,
-    color: "#D0D0D0",
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey300,
     textAlign: "center",
     lineHeight: 16,
   },

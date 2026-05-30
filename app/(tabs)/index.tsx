@@ -8,7 +8,6 @@ import {
   FlatList,
   Modal,
   SafeAreaView,
-  ActivityIndicator,
   Image,
   RefreshControl,
 } from "react-native";
@@ -16,6 +15,15 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Avatar from "../../components/ui/Avatar";
+import EmptyState from "../../components/ui/EmptyState";
+import LoadingScreen from "../../components/ui/LoadingScreen";
+import Card from "../../components/ui/Card";
+import { Icons } from "../../constants/Icons";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
@@ -61,7 +69,6 @@ export default function HomeScreen() {
   const loadInitialData = async () => {
     setLoading(true);
 
-    // Load cities and skills in parallel
     const [{ data: citiesData }, { data: skillsData }] = await Promise.all([
       supabase
         .from("cities")
@@ -74,7 +81,6 @@ export default function HomeScreen() {
     if (citiesData) setCities(citiesData);
     if (skillsData) setSkills(skillsData);
 
-    // Set default city from user profile
     if (profile?.city_id && citiesData) {
       const userCity = citiesData.find((c) => c.id === profile.city_id);
       if (userCity) setSelectedCity(userCity);
@@ -123,7 +129,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // Enrich with skill names
     const enriched = (data || []).map((f) => {
       const user = Array.isArray(f.users) ? f.users[0] : f.users;
       const cities = user?.cities;
@@ -146,7 +151,6 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [selectedCity, selectedSkill]);
 
-  // Filter by search query
   const filtered = freelancers.filter((f) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -156,22 +160,8 @@ export default function HomeScreen() {
     );
   });
 
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
   if (loading) {
-    return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator color="#111" size="large" />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -190,24 +180,24 @@ export default function HomeScreen() {
           <Text style={s.cityPillText}>
             {selectedCity?.name ?? "Select city"}
           </Text>
-          <Text style={s.cityPillArrow}>▾</Text>
+          <Text style={s.cityPillArrow}>{Icons.chevronDown}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Search bar */}
       <View style={s.searchWrap}>
-        <Text style={s.searchIcon}>🔍</Text>
+        <Text style={s.searchIcon}>{Icons.search}</Text>
         <TextInput
           style={s.searchInput}
           placeholder="Search skill or name..."
-          placeholderTextColor="#D0D0D0"
+          placeholderTextColor={Colors.grey300}
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch("")}>
-            <Text style={s.searchClear}>✕</Text>
+            <Text style={s.searchClear}>{Icons.close}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -271,73 +261,67 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#111"
+            tintColor={Colors.black}
           />
         }
         ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyIcon}>🔍</Text>
-            <Text style={s.emptyTitle}>No freelancers found</Text>
-            <Text style={s.emptyText}>Try a different skill or city</Text>
-          </View>
+          <EmptyState
+            icon={Icons.search}
+            title="No freelancers here yet"
+            subtitle="Be the first to join GetMe in this city"
+          />
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={s.card}
-            onPress={() => router.push(`/freelancer/${item.user_id}`)}
-            activeOpacity={0.85}
-          >
-            {/* Card header */}
-            <View style={s.cardHeader}>
-              {item.users?.avatar_url ? (
-                <Image
-                  source={{ uri: item.users.avatar_url }}
-                  style={s.avatar}
+          <Card style={s.card}>
+            <TouchableOpacity
+              onPress={() => router.push(`/freelancer/${item.user_id}`)}
+              activeOpacity={0.85}
+            >
+              {/* Card header */}
+              <View style={s.cardHeader}>
+                <Avatar
+                  name={item.users?.name}
+                  uri={item.users?.avatar_url}
+                  size="md"
                 />
-              ) : (
-                <View style={s.avatarFallback}>
-                  <Text style={s.avatarText}>
-                    {getInitials(item.users?.name ?? "")}
+                <View style={s.cardInfo}>
+                  <Text style={s.cardName}>{item.users?.name ?? "Unknown"}</Text>
+                  <Text style={s.cardMeta}>
+                    {item.skill_names[0] ?? "Freelancer"} ·{" "}
+                    {item.users?.cities?.name}
                   </Text>
                 </View>
+              </View>
+
+              {/* Skill tags */}
+              {item.skill_names.length > 0 && (
+                <View style={s.tagsRow}>
+                  {item.skill_names.slice(0, 4).map((tag, i) => (
+                    <View key={i} style={s.tag}>
+                      <Text style={s.tagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
               )}
-              <View style={s.cardInfo}>
-                <Text style={s.cardName}>{item.users?.name ?? "Unknown"}</Text>
-                <Text style={s.cardMeta}>
-                  {item.skill_names[0] ?? "Freelancer"} ·{" "}
-                  {item.users?.cities?.name}
-                </Text>
-              </View>
-            </View>
 
-            {/* Skill tags */}
-            {item.skill_names.length > 0 && (
-              <View style={s.tagsRow}>
-                {item.skill_names.slice(0, 4).map((tag, i) => (
-                  <View key={i} style={s.tag}>
-                    <Text style={s.tagText}>{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Portfolio strip or no preview message */}
-            {item.portfolio_urls && item.portfolio_urls.length > 0 ? (
-              <View style={s.portfolioStrip}>
-                {item.portfolio_urls.slice(0, 3).map((url, i) => (
-                  <Image
-                    key={i}
-                    source={{ uri: url }}
-                    style={s.portfolioThumb}
-                  />
-                ))}
-              </View>
-            ) : (
-              <View style={s.noPreviewWrap}>
-                <Text style={s.noPreviewText}>No preview available</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+              {/* Portfolio strip or no preview message */}
+              {item.portfolio_urls && item.portfolio_urls.length > 0 ? (
+                <View style={s.portfolioStrip}>
+                  {item.portfolio_urls.slice(0, 3).map((url, i) => (
+                    <Image
+                      key={i}
+                      source={{ uri: url }}
+                      style={s.portfolioThumb}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={s.noPreviewWrap}>
+                  <Text style={s.noPreviewText}>No preview available</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Card>
         )}
       />
 
@@ -376,7 +360,7 @@ export default function HomeScreen() {
                   {city.name}
                 </Text>
                 {selectedCity?.id === city.id && (
-                  <Text style={s.cityCheck}>✓</Text>
+                  <Text style={s.cityCheck}>{Icons.check}</Text>
                 )}
               </TouchableOpacity>
             ))}
@@ -388,196 +372,212 @@ export default function HomeScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
+  container: { flex: 1, backgroundColor: Colors.white },
 
   // Top bar
   topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   logo: {
-    fontFamily: "System",
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111",
+    fontFamily: FontFamily.displayBold,
+    fontSize: FontSize.xxl,
+    color: Colors.black,
     letterSpacing: -0.5,
   },
-  logoGreen: { color: "#1D9E75" },
+  logoGreen: { color: Colors.green },
   cityPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "#F4F4F4",
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
+    borderColor: Colors.border,
   },
-  cityPillDot: { fontSize: 8, color: "#1D9E75" },
-  cityPillText: { fontSize: 12, fontWeight: "500", color: "#111" },
-  cityPillArrow: { fontSize: 10, color: "#6B6B68" },
+  cityPillDot: { fontSize: 8, color: Colors.green },
+  cityPillText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.black,
+  },
+  cityPillArrow: { fontSize: FontSize.xs, color: Colors.grey500 },
 
   // Search
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: "#F4F4F4",
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 10,
-    gap: 8,
+    gap: Spacing.sm,
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
+    borderColor: Colors.border,
   },
-  searchIcon: { fontSize: 14 },
-  searchInput: { flex: 1, fontSize: 13, color: "#111" },
-  searchClear: { fontSize: 12, color: "#6B6B68", padding: 2 },
+  searchIcon: { fontSize: FontSize.base },
+  searchInput: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.black,
+  },
+  searchClear: { fontSize: 12, color: Colors.grey500, padding: 2 },
 
   // Skills
   skillsScroll: { maxHeight: 44 },
-  skillsRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 4 },
+  skillsRow: { paddingHorizontal: Spacing.lg, gap: Spacing.sm, paddingBottom: Spacing.xs },
   skillChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: Radius.full,
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    backgroundColor: "#fff",
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
   },
-  skillChipActive: { backgroundColor: "#111", borderColor: "#111" },
+  skillChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
   skillChipIcon: { fontSize: 12 },
-  skillChipText: { fontSize: 12, fontWeight: "500", color: "#6B6B68" },
-  skillChipTextActive: { color: "#fff" },
+  skillChipText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.grey500,
+  },
+  skillChipTextActive: { color: Colors.white },
 
   // Results header
   resultsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
   },
-  resultsTitle: { fontSize: 13, fontWeight: "500", color: "#111" },
-  resultsCount: { fontSize: 11, color: "#6B6B68" },
+  resultsTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.md,
+    color: Colors.black,
+  },
+  resultsCount: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
 
   // List
-  listContent: { paddingHorizontal: 16, paddingBottom: 20, gap: 10 },
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: 10 },
 
   // Card
-  card: {
-    backgroundColor: "#fff",
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 16,
-    padding: 12,
-  },
+  card: { padding: Spacing.md },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
-  avatarFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F4F4F4",
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 13, fontWeight: "500", color: "#111" },
   cardInfo: { flex: 1 },
-  cardName: { fontSize: 14, fontWeight: "500", color: "#111", marginBottom: 2 },
-  cardMeta: { fontSize: 11, color: "#6B6B68" },
+  cardName: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    marginBottom: 2,
+  },
+  cardMeta: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
 
   // Tags
-  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginBottom: 8 },
+  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginBottom: Spacing.sm },
   tag: {
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 8,
-    paddingHorizontal: 8,
+    borderColor: Colors.border,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
   },
-  tagText: { fontSize: 10, color: "#6B6B68" },
+  tagText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey500,
+  },
 
   // Portfolio
   portfolioStrip: { flexDirection: "row", gap: 6 },
   portfolioThumb: {
     flex: 1,
     height: 60,
-    borderRadius: 8,
-    backgroundColor: "#F4F4F4",
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.grey100,
   },
 
   // No preview
   noPreviewWrap: {
     paddingVertical: 10,
     alignItems: "center",
-    backgroundColor: "#F9F9F9",
-    borderRadius: 8,
+    backgroundColor: Colors.offWhite,
+    borderRadius: Radius.sm,
     borderWidth: 0.5,
-    borderColor: "#F0F0F0",
+    borderColor: Colors.grey100,
   },
-  noPreviewText: { fontSize: 11, color: "#D0D0D0", fontStyle: "italic" },
-
-  // Empty state
-  emptyWrap: { alignItems: "center", paddingTop: 60, gap: 8 },
-  emptyIcon: { fontSize: 32 },
-  emptyTitle: { fontSize: 16, fontWeight: "500", color: "#111" },
-  emptyText: { fontSize: 13, color: "#6B6B68" },
+  noPreviewText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey300,
+    fontStyle: "italic",
+  },
 
   // City sheet
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
+  overlay: { flex: 1, backgroundColor: Colors.overlay },
   sheet: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: Spacing.xl,
+    borderTopRightRadius: Spacing.xl,
+    padding: Spacing.lg,
     maxHeight: "60%",
   },
   sheetHandle: {
-    width: 32,
+    width: Spacing.xxxl,
     height: 3,
-    backgroundColor: "#E8E8E8",
+    backgroundColor: Colors.grey200,
     borderRadius: 2,
     alignSelf: "center",
-    marginBottom: 14,
+    marginBottom: Spacing.md,
   },
   sheetTitle: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#111",
-    marginBottom: 12,
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    marginBottom: Spacing.md,
   },
   cityItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#F4F4F4",
+    borderBottomColor: Colors.grey100,
   },
-  cityName: { fontSize: 14, color: "#111" },
-  cityNameSelected: { fontWeight: "500" },
-  cityCheck: { fontSize: 13, color: "#1D9E75", fontWeight: "500" },
+  cityName: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  cityNameSelected: { fontFamily: FontFamily.medium },
+  cityCheck: {
+    fontSize: FontSize.md,
+    color: Colors.green,
+    fontFamily: FontFamily.medium,
+  },
 });

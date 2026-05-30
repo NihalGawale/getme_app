@@ -4,14 +4,20 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
-  ActivityIndicator,
   SafeAreaView,
 } from "react-native";
 import { useEffect, useState, useCallback } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Avatar from "../../components/ui/Avatar";
+import EmptyState from "../../components/ui/EmptyState";
+import LoadingScreen from "../../components/ui/LoadingScreen";
+import { Icons } from "../../constants/Icons";
 
 type Conversation = {
   id: string;
@@ -35,14 +41,19 @@ export default function MessagesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (user) fetchConversations();
-    }, [user]),
+      if (user?.id) {
+        console.log('Messages tab focused - refetching conversations');
+        fetchConversations();
+      }
+    }, [user?.id]),
   );
 
   useEffect(() => {
     if (user) {
       const cleanup = subscribeToMessages();
-      return () => { cleanup(); };
+      return () => {
+        cleanup();
+      };
     }
   }, [user]);
 
@@ -67,20 +78,17 @@ export default function MessagesScreen() {
       return;
     }
 
-    // Enrich each conversation
     const enriched = await Promise.all(
       data.map(async (convo) => {
         const otherUserId =
           convo.client_id === user.id ? convo.freelancer_id : convo.client_id;
 
-        // Get other user details
         const { data: otherUser } = await supabase
           .from("users")
           .select("id, name, avatar_url")
           .eq("id", otherUserId)
           .single();
 
-        // Get last message
         const { data: lastMsg } = await supabase
           .from("messages")
           .select("content")
@@ -89,7 +97,6 @@ export default function MessagesScreen() {
           .limit(1)
           .single();
 
-        // Get unread count
         const { count } = await supabase
           .from("messages")
           .select("*", { count: "exact", head: true })
@@ -141,17 +148,9 @@ export default function MessagesScreen() {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(subscription); };
-  };
-
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   };
 
   const formatTime = (timestamp: string) => {
@@ -166,11 +165,7 @@ export default function MessagesScreen() {
   };
 
   if (loading) {
-    return (
-      <View style={s.loadingWrap}>
-        <ActivityIndicator color="#111" size="large" />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -189,13 +184,11 @@ export default function MessagesScreen() {
         onRefresh={fetchConversations}
         refreshing={false}
         ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyIcon}>💬</Text>
-            <Text style={s.emptyTitle}>No messages yet</Text>
-            <Text style={s.emptyText}>
-              Find a freelancer and start a conversation
-            </Text>
-          </View>
+          <EmptyState
+            icon={Icons.messages}
+            title="No messages yet"
+            subtitle="Find a freelancer and start a conversation"
+          />
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -203,21 +196,12 @@ export default function MessagesScreen() {
             onPress={() => router.push(`/chat/${item.id}`)}
             activeOpacity={0.85}
           >
-            {/* Avatar */}
-            {item.other_user.avatar_url ? (
-              <Image
-                source={{ uri: item.other_user.avatar_url }}
-                style={s.avatar}
-              />
-            ) : (
-              <View style={s.avatarFallback}>
-                <Text style={s.avatarText}>
-                  {getInitials(item.other_user.name)}
-                </Text>
-              </View>
-            )}
+            <Avatar
+              name={item.other_user.name}
+              uri={item.other_user.avatar_url}
+              size="lg"
+            />
 
-            {/* Content */}
             <View style={s.convoContent}>
               <View style={s.convoTopRow}>
                 <Text
@@ -259,79 +243,62 @@ export default function MessagesScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  loadingWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
+  container: { flex: 1, backgroundColor: Colors.white },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: Colors.grey100,
   },
-  title: { fontSize: 20, fontWeight: "500", color: "#111" },
-  listContent: { paddingTop: 8 },
+  title: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xl,
+    color: Colors.black,
+  },
+  listContent: { paddingTop: Spacing.sm },
   emptyContainer: { flex: 1 },
-  emptyWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 100,
-    gap: 8,
-  },
-  emptyIcon: { fontSize: 40 },
-  emptyTitle: { fontSize: 16, fontWeight: "500", color: "#111" },
-  emptyText: {
-    fontSize: 13,
-    color: "#6B6B68",
-    textAlign: "center",
-    paddingHorizontal: 40,
-  },
   convoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#F8F8F8",
+    borderBottomColor: Colors.offWhite,
   },
-  convoRowUnread: { backgroundColor: "#FAFAFA" },
-  avatar: { width: 48, height: 48, borderRadius: 24, flexShrink: 0 },
-  avatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#F4F4F4",
-    borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  avatarText: { fontSize: 16, fontWeight: "500", color: "#111" },
-  convoContent: { flex: 1, gap: 4 },
+  convoRowUnread: { backgroundColor: Colors.offWhite },
+  convoContent: { flex: 1, gap: Spacing.xs },
   convoTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  convoName: { fontSize: 14, fontWeight: "400", color: "#111" },
-  convoNameUnread: { fontWeight: "500" },
-  convoTime: { fontSize: 11, color: "#6B6B68" },
+  convoName: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  convoNameUnread: { fontFamily: FontFamily.medium },
+  convoTime: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
   convoBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  convoLastMsg: { fontSize: 13, color: "#6B6B68", flex: 1 },
-  convoLastMsgUnread: { color: "#111" },
+  convoLastMsg: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+    flex: 1,
+  },
+  convoLastMsgUnread: { color: Colors.black },
   unreadBadge: {
-    backgroundColor: "#111",
+    backgroundColor: Colors.black,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -339,5 +306,9 @@ const s = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 5,
   },
-  unreadCount: { fontSize: 11, fontWeight: "500", color: "#fff" },
+  unreadCount: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+  },
 });

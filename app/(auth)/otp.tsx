@@ -13,6 +13,11 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
+import Button from "../../components/ui/Button";
 
 export default function OTPScreen() {
   const router = useRouter();
@@ -118,7 +123,7 @@ export default function OTPScreen() {
     const { error: upsertError } = await supabase.from("users").upsert({
       id: userId,
       phone: userPhone,
-      email: userEmail || null, // ← convert empty string to null
+      email: userEmail || null,
       role: role || "client",
     });
     
@@ -135,8 +140,6 @@ export default function OTPScreen() {
     if (role === "freelancer") {
       router.replace("/(onboarding)/freelancer-profile");
     } else {
-      // Always send new clients to details screen
-      // index.tsx will handle existing clients with names
       router.replace("/(onboarding)/client-details");
     }
   };
@@ -148,7 +151,7 @@ export default function OTPScreen() {
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <View style={s.progress}>
         {[0, 1, 2, 3, 4].map((i) => (
           <View key={i} style={[s.bar, i < 3 && s.barActive]} />
@@ -181,14 +184,12 @@ export default function OTPScreen() {
         </TouchableOpacity>
       </View>
       <View style={{ flex: 1 }} />
-      <TouchableOpacity
-        style={[s.btnPrimary, (!filled || loading) && s.btnDisabled]}
+      <Button
+        label="Verify"
         onPress={handleVerify}
-        activeOpacity={0.85}
-        disabled={!filled || loading}
-      >
-        <Text style={s.btnText}>{loading ? "Verifying..." : "Verify"}</Text>
-      </TouchableOpacity>
+        loading={loading}
+        disabled={!filled}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -196,42 +197,53 @@ export default function OTPScreen() {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
+    backgroundColor: Colors.white,
+    paddingHorizontal: Layout.screenPadding,
     paddingTop: 56,
     paddingBottom: 40,
   },
-  progress: { flexDirection: "row", gap: 4, marginBottom: 28 },
-  bar: { flex: 1, height: 3, borderRadius: 99, backgroundColor: "#E8E8E8" },
-  barActive: { backgroundColor: "#111" },
-  title: { fontSize: 20, fontWeight: "500", color: "#111", marginBottom: 8 },
-  sub: { fontSize: 13, color: "#6B6B68", marginBottom: 28, lineHeight: 20 },
-  otpRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  progress: { flexDirection: "row", gap: Spacing.xs, marginBottom: 28 },
+  bar: { flex: 1, height: 3, borderRadius: Radius.full, backgroundColor: Colors.grey200 },
+  barActive: { backgroundColor: Colors.black },
+  title: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xl,
+    color: Colors.black,
+    marginBottom: Spacing.sm,
+  },
+  sub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+    marginBottom: 28,
+    lineHeight: 20,
+  },
+  otpRow: { flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.md },
   otpBox: {
     flex: 1,
     height: 56,
     borderWidth: 0.5,
-    borderColor: "#E8E8E8",
-    borderRadius: 12,
-    fontSize: 20,
-    fontWeight: "500",
-    color: "#111",
+    borderColor: Colors.grey200,
+    borderRadius: Radius.md,
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xl,
+    color: Colors.black,
     textAlign: "center",
   },
-  otpFilled: { borderColor: "#111", backgroundColor: "#F8F8F8" },
+  otpFilled: { borderColor: Colors.black, backgroundColor: Colors.grey100 },
   resendRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  resendTimer: { fontSize: 12, color: "#D0D0D0" },
-  resendLink: { fontSize: 12, color: "#111", fontWeight: "500" },
-  btnPrimary: {
-    backgroundColor: "#111",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
+  resendTimer: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.grey300,
   },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { fontSize: 14, fontWeight: "500", color: "#fff" },
+  resendLink: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.black,
+  },
 });
