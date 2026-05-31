@@ -5,24 +5,24 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
   Alert,
-  SafeAreaView,
+  Dimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useCallback } from "react";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { Feather } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize, TextStyles } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
-import { Icons } from "../../constants/Icons";
 import Avatar from "../../components/ui/Avatar";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
@@ -33,27 +33,43 @@ import LoadingScreen from "../../components/ui/LoadingScreen";
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
 
-const GRID_SIZE = (Layout.screenWidth - Layout.screenPadding * 2) / 3;
+const GRID_SIZE = Math.floor(
+  (Dimensions.get("window").width - Spacing.lg * 2 - 4) / 3,
+);
 
 // ─── Cloudinary upload ────────────────────────────────────────────────────────
 
-async function uploadToCloudinary(uri: string): Promise<string | null> {
+const uploadToCloudinary = async (uri: string): Promise<string | null> => {
   try {
+    console.log("Starting Cloudinary upload...");
+    console.log("Cloud name:", process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME);
+
     const formData = new FormData();
-    formData.append("file", { uri, type: "image/jpeg", name: "upload.jpg" } as any);
+    formData.append("file", {
+      uri,
+      type: "image/jpeg",
+      name: "upload.jpg",
+    } as any);
     formData.append("upload_preset", "getme_profiles");
-    formData.append("cloud_name", process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME!);
+    formData.append(
+      "cloud_name",
+      process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME!,
+    );
+
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
       { method: "POST", body: formData },
     );
+
     const data = await response.json();
+    console.log("Cloudinary response:", JSON.stringify(data));
+
     return data.secure_url ?? null;
   } catch (e) {
     console.log("Cloudinary upload error:", e);
     return null;
   }
-}
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -63,6 +79,7 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingPortfolio, setUploadingPortfolio] = useState(false);
 
@@ -101,9 +118,21 @@ export default function ProfileScreen() {
       { data: citiesData },
       { data: skillsData },
     ] = await Promise.all([
-      supabase.from("users").select("name, avatar_url, city_id").eq("id", user.id).single(),
-      supabase.from("freelancer_profiles").select("bio, skills, portfolio_urls").eq("user_id", user.id).single(),
-      supabase.from("cities").select("id, name").eq("is_active", true).order("name"),
+      supabase
+        .from("users")
+        .select("name, avatar_url, city_id")
+        .eq("id", user.id)
+        .single(),
+      supabase
+        .from("freelancer_profiles")
+        .select("bio, skills, portfolio_urls")
+        .eq("user_id", user.id)
+        .single(),
+      supabase
+        .from("cities")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name"),
       supabase.from("skills").select("id, name, icon").eq("is_active", true),
     ]);
 
@@ -134,7 +163,8 @@ export default function ProfileScreen() {
 
   // ── Derived ──────────────────────────────────────────────────────────────
 
-  const fullName = [firstName, lastName].filter(Boolean).join(" ") || profile?.name || "";
+  const fullName =
+    [firstName, lastName].filter(Boolean).join(" ") || profile?.name || "";
   const selectedCity = cities.find((c) => c.id === cityId) ?? null;
   const skillObjects = selectedSkills
     .map((id) => skills.find((s) => s.id === id))
@@ -172,7 +202,12 @@ export default function ProfileScreen() {
     const { error: fpErr } = await supabase
       .from("freelancer_profiles")
       .upsert(
-        { user_id: user.id, bio, skills: selectedSkills, portfolio_urls: portfolioUrls },
+        {
+          user_id: user.id,
+          bio,
+          skills: selectedSkills,
+          portfolio_urls: portfolioUrls,
+        },
         { onConflict: "user_id" },
       );
 
@@ -183,7 +218,15 @@ export default function ProfileScreen() {
     }
 
     await refreshProfile();
-    const newOriginal = { fn: firstName, ln: lastName, av: avatarUrl, cid: cityId, b: bio, sk: selectedSkills, pu: portfolioUrls };
+    const newOriginal = {
+      fn: firstName,
+      ln: lastName,
+      av: avatarUrl,
+      cid: cityId,
+      b: bio,
+      sk: selectedSkills,
+      pu: portfolioUrls,
+    };
     setOriginalData(newOriginal);
     setSaving(false);
     setIsEditing(false);
@@ -233,7 +276,7 @@ export default function ProfileScreen() {
 
   if (profile?.role === "client") {
     return (
-      <SafeAreaView style={s.container}>
+      <SafeAreaView style={s.container} edges={["top"]}>
         <View style={s.header}>
           <Text style={s.headerTitle}>Profile</Text>
         </View>
@@ -271,14 +314,28 @@ export default function ProfileScreen() {
         <View style={s.avatarSection}>
           <View>
             {uploadingPhoto ? (
-              <View style={[s.avatarLoadingWrap, { width: Layout.avatarXl, height: Layout.avatarXl, borderRadius: Layout.avatarXl / 2 }]}>
+              <View
+                style={[
+                  s.avatarLoadingWrap,
+                  {
+                    width: Layout.avatarXl,
+                    height: Layout.avatarXl,
+                    borderRadius: Layout.avatarXl / 2,
+                  },
+                ]}
+              >
                 <ActivityIndicator color={Colors.grey500} />
               </View>
             ) : (
-              <Avatar name={fullName || profile?.name} uri={avatarUrl} size="xl" />
+              <Avatar
+                name={fullName || profile?.name}
+                uri={avatarUrl}
+                size="xl"
+              />
             )}
           </View>
-          <TouchableOpacity onPress={handlePickAvatar}>
+          <TouchableOpacity onPress={handlePickAvatar} style={s.changePhotoBtn}>
+            <Feather name="camera" size={16} color={Colors.green} />
             <Text style={s.changePhotoText}>Change photo</Text>
           </TouchableOpacity>
         </View>
@@ -308,10 +365,14 @@ export default function ProfileScreen() {
           onPress={() => setShowCitySheet(true)}
           activeOpacity={0.8}
         >
-          <Text style={selectedCity ? s.citySelectorText : s.citySelectorPlaceholder}>
+          <Text
+            style={
+              selectedCity ? s.citySelectorText : s.citySelectorPlaceholder
+            }
+          >
             {selectedCity?.name ?? "Select city"}
           </Text>
-          <Text style={s.chevron}>{Icons.chevronDown}</Text>
+          <Feather name="chevron-down" size={14} color={Colors.grey500} />
         </TouchableOpacity>
 
         {/* Skills */}
@@ -328,7 +389,9 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={s.skillTileIcon}>{skill.icon}</Text>
-                <Text style={[s.skillTileName, active && s.skillTileNameActive]}>
+                <Text
+                  style={[s.skillTileName, active && s.skillTileNameActive]}
+                >
                   {skill.name}
                 </Text>
               </TouchableOpacity>
@@ -362,7 +425,7 @@ export default function ProfileScreen() {
                 style={s.removeBtn}
                 onPress={() => handleRemovePortfolioImage(i)}
               >
-                <Text style={s.removeBtnText}>{Icons.close}</Text>
+                <Feather name="x" size={12} color={Colors.white} />
               </TouchableOpacity>
             </View>
           ))}
@@ -376,7 +439,7 @@ export default function ProfileScreen() {
               {uploadingPortfolio ? (
                 <ActivityIndicator color={Colors.grey400} />
               ) : (
-                <Text style={s.addCellIcon}>{Icons.plus}</Text>
+                <Feather name="plus" size={24} color={Colors.grey400} />
               )}
             </TouchableOpacity>
           )}
@@ -395,9 +458,7 @@ export default function ProfileScreen() {
       <View style={s.profileTop}>
         <Avatar name={fullName || profile?.name} uri={avatarUrl} size="xl" />
         <Text style={s.profileName}>{fullName || profile?.name}</Text>
-        {selectedCity && (
-          <Text style={s.profileCity}>{selectedCity.name}</Text>
-        )}
+        {selectedCity && <Text style={s.profileCity}>{selectedCity.name}</Text>}
       </View>
 
       <Divider />
@@ -408,7 +469,9 @@ export default function ProfileScreen() {
         {bio ? (
           <Text style={s.bioText}>{bio}</Text>
         ) : (
-          <Text style={s.emptyFieldText}>Add a bio to tell clients about yourself</Text>
+          <Text style={s.emptyFieldText}>
+            Add a bio to tell clients about yourself
+          </Text>
         )}
       </View>
 
@@ -434,12 +497,14 @@ export default function ProfileScreen() {
       <View style={s.section}>
         <Text style={[TextStyles.label, s.sectionLabel]}>Portfolio</Text>
         {portfolioUrls.length > 0 ? (
-          <View style={s.portfolioGrid}>
-            {portfolioUrls.map((url, i) => (
-              <View key={i} style={s.portfolioCell}>
-                <Image source={{ uri: url }} style={s.portfolioImage} />
-              </View>
-            ))}
+          <View style={s.portfolioViewWrap}>
+            <View style={s.portfolioGrid}>
+              {portfolioUrls.map((url, i) => (
+                <View key={i} style={s.portfolioCell}>
+                  <Image source={{ uri: url }} style={s.portfolioImage} />
+                </View>
+              ))}
+            </View>
           </View>
         ) : (
           <EmptyState
@@ -450,17 +515,13 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      {/* Sign out */}
-      <TouchableOpacity style={s.signOutRow} onPress={signOut}>
-        <Text style={s.signOutText}>Sign out</Text>
-      </TouchableOpacity>
-
       <View style={{ height: Spacing.huge }} />
     </ScrollView>
   );
 
+
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={[s.container, { position: 'relative', zIndex: 100 }]} edges={["top"]}> 
       {/* Header */}
       <View style={s.header}>
         {isEditing ? (
@@ -480,52 +541,96 @@ export default function ProfileScreen() {
         ) : (
           <>
             <Text style={s.headerTitle}>Profile</Text>
-            <TouchableOpacity onPress={() => setIsEditing(true)}>
-              <Text style={[s.headerAction, { color: Colors.green }]}>Edit</Text>
+            <TouchableOpacity
+              onPress={() => setShowMenu(!showMenu)}
+              style={s.menuBtn}
+              activeOpacity={0.7}
+            >
+              <Feather name="more-vertical" size={20} color={Colors.black} />
             </TouchableOpacity>
           </>
         )}
       </View>
 
+      {/* Dropdown menu (top-right) */}
+      {showMenu && (
+        <>
+          {/* Invisible overlay to close menu on outside tap */}
+          <TouchableOpacity
+            style={s.menuDismiss}
+            activeOpacity={1}
+            onPress={() => setShowMenu(false)}
+          />
+
+          {/* Dropdown menu */}
+          <View style={s.dropdown}>
+            <TouchableOpacity
+              style={s.dropdownItem}
+              onPress={() => {
+                setShowMenu(false);
+                setIsEditing(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="edit-2" size={16} color={Colors.black} />
+              <Text style={s.dropdownText}>Edit profile</Text>
+            </TouchableOpacity>
+
+            <View style={s.dropdownDivider} />
+
+            <TouchableOpacity
+              style={s.dropdownItem}
+              onPress={() => {
+                setShowMenu(false);
+                signOut();
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="log-out" size={16} color={Colors.danger} />
+              <Text style={[s.dropdownText, { color: Colors.danger }]}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
       {content}
 
-      {/* City bottom sheet */}
-      <Modal
-        visible={showCitySheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCitySheet(false)}
-      >
-        <TouchableOpacity
-          style={s.overlay}
-          activeOpacity={1}
-          onPress={() => setShowCitySheet(false)}
-        />
-        <View style={s.sheet}>
-          <View style={s.sheetHandle} />
-          <Text style={s.sheetTitle}>Select city</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {cities.map((city) => (
-              <TouchableOpacity
-                key={city.id}
-                style={s.cityItem}
-                onPress={() => {
-                  setCityId(city.id);
-                  setShowCitySheet(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[s.cityName, cityId === city.id && s.cityNameSelected]}>
-                  {city.name}
-                </Text>
-                {cityId === city.id && (
-                  <Text style={s.cityCheck}>{Icons.check}</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
+      {/* City bottom sheet (inline, no Modal) */}
+      {showCitySheet && (
+        <>
+          <TouchableOpacity
+            style={s.overlay}
+            activeOpacity={1}
+            onPress={() => setShowCitySheet(false)}
+          />
+          <View style={s.sheet}>
+            <View style={s.sheetHandle} />
+            <Text style={s.sheetTitle}>Select city</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {cities.map((city) => (
+                <TouchableOpacity
+                  key={city.id}
+                  style={s.cityItem}
+                  onPress={() => {
+                    setCityId(city.id);
+                    setShowCitySheet(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[s.cityName, cityId === city.id && s.cityNameSelected]}
+                  >
+                    {city.name}
+                  </Text>
+                  {cityId === city.id && (
+                    <Feather name="check" size={14} color={Colors.green} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -555,7 +660,11 @@ const s = StyleSheet.create({
   },
 
   // Scroll
-  scrollContent: { paddingHorizontal: Layout.screenPadding, paddingTop: Spacing.xl },
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    paddingBottom: 100,
+  },
 
   // View mode — profile top
   profileTop: {
@@ -608,12 +717,14 @@ const s = StyleSheet.create({
   },
 
   // Portfolio grid (shared)
+  portfolioViewWrap: {
+    padding: Spacing.lg,
+    marginHorizontal: -Spacing.lg,
+  },
   portfolioGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 2,
-    marginLeft: -Layout.screenPadding,
-    width: Layout.screenWidth,
   },
   portfolioCell: {
     width: GRID_SIZE,
@@ -635,6 +746,11 @@ const s = StyleSheet.create({
     backgroundColor: Colors.grey100,
     alignItems: "center",
     justifyContent: "center",
+  },
+  changePhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
   },
   changePhotoText: {
     fontFamily: FontFamily.medium,
@@ -682,7 +798,7 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.grey300,
   },
-  chevron: { fontSize: FontSize.base, color: Colors.grey500 },
+  chevron: { width: 14 }, // kept as spacer placeholder
 
   // Edit mode — skills grid
   skillsSubtitle: {
@@ -755,7 +871,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  removeBtnText: { fontSize: 10, color: Colors.white },
+  removeBtnText: { fontSize: 10, color: Colors.white }, // unused — Feather icon used
   addCell: {
     width: GRID_SIZE,
     height: GRID_SIZE,
@@ -765,7 +881,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  addCellIcon: { fontSize: 24, color: Colors.grey400 },
+  addCellIcon: { fontSize: 24, color: Colors.grey400 }, // unused — Feather icon used
 
   // Client view — info card
   infoCard: {
@@ -795,7 +911,7 @@ const s = StyleSheet.create({
     color: Colors.black,
   },
 
-  // Sign out
+  // Sign out (client view only)
   signOutRow: {
     paddingVertical: 16,
     alignItems: "center",
@@ -804,6 +920,56 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: FontSize.base,
     color: Colors.danger,
+  },
+
+  // 3-dots menu
+  menuBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Dropdown menu styles
+  menuDismiss: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 98,
+  },
+  dropdown: {
+    position: 'absolute',
+    top: 52, // height of header row
+    right: Spacing.xl,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    minWidth: 160,
+    zIndex: 999,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  dropdownText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  dropdownDivider: {
+    height: 0.5,
+    backgroundColor: Colors.border,
+    marginHorizontal: Spacing.sm,
   },
 
   // City sheet

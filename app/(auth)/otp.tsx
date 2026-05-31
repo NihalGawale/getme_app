@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
@@ -147,6 +148,7 @@ export default function OTPScreen() {
   const filled = otp.join("").length === 6;
 
   return (
+    <SafeAreaView style={s.safeArea} edges={["top", "bottom"]}>
     <KeyboardAvoidingView
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -191,13 +193,17 @@ export default function OTPScreen() {
         disabled={!filled}
       />
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  container: {
+    flex: 1,
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 56,
     paddingBottom: 40,

@@ -4,8 +4,8 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
@@ -17,7 +17,7 @@ import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
 import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { Icons } from "../../constants/Icons";
+import FeatherIcon from "../../components/ui/FeatherIcon";
 
 type Conversation = {
   id: string;
@@ -169,7 +169,7 @@ export default function MessagesScreen() {
   }
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.container} edges={["top"]}>
       <View style={s.header}>
         <Text style={s.title}>Messages</Text>
       </View>
@@ -185,7 +185,7 @@ export default function MessagesScreen() {
         refreshing={false}
         ListEmptyComponent={
           <EmptyState
-            icon={Icons.messages}
+            icon={<FeatherIcon name="message-circle" size={36} color={Colors.grey300} />}
             title="No messages yet"
             subtitle="Find a freelancer and start a conversation"
           />
@@ -256,7 +256,7 @@ const s = StyleSheet.create({
     fontSize: FontSize.xl,
     color: Colors.black,
   },
-  listContent: { paddingTop: Spacing.sm },
+  listContent: { paddingTop: Spacing.sm, paddingBottom: 100 },
   emptyContainer: { flex: 1 },
   convoRow: {
     flexDirection: "row",

@@ -7,13 +7,14 @@ import {
   Platform,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
-import { Icons } from "../../constants/Icons";
+import FeatherIcon from "../../components/ui/FeatherIcon";
 import { Layout } from "../../constants/Layout";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
@@ -54,6 +55,7 @@ export default function PhoneScreen() {
   };
 
   return (
+    <SafeAreaView style={s.safeArea} edges={["top", "bottom"]}>
     <KeyboardAvoidingView
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -79,7 +81,7 @@ export default function PhoneScreen() {
         />
       </View>
       <View style={s.note}>
-        <Text style={s.noteIcon}>{Icons.lock}</Text>
+        <FeatherIcon name="lock" size={18} color={Colors.grey500} style={s.noteIcon} />
         <Text style={s.noteText}>
           Your number is never shown on your public profile.
         </Text>
@@ -92,13 +94,17 @@ export default function PhoneScreen() {
         disabled={phone.length < 10}
       />
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  container: {
+    flex: 1,
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 56,
     paddingBottom: 40,

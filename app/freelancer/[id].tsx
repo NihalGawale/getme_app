@@ -6,11 +6,15 @@ import {
   TouchableOpacity,
   Image,
   Linking,
-  SafeAreaView,
   Alert,
+  Dimensions,
+  Modal,
+  PanResponder,
+  Animated,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
@@ -21,7 +25,102 @@ import Avatar from "../../components/ui/Avatar";
 import Button from "../../components/ui/Button";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import Divider from "../../components/ui/Divider";
-import { Icons } from "../../constants/Icons";
+import { TextStyles } from "../../constants/Typography";
+import FeatherIcon from "../../components/ui/FeatherIcon";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const CELL_SIZE = Math.floor((SCREEN_WIDTH - 4) / 3);
+
+function LightboxImage({
+  uri,
+  width,
+  height,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const lastScale = useRef(1);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+  const lastTranslateX = useRef(0);
+  const lastTranslateY = useRef(0);
+  const initialDistance = useRef<number | null>(null);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+
+      onPanResponderGrant: () => {
+        lastTranslateX.current = (translateX as any)._value;
+        lastTranslateY.current = (translateY as any)._value;
+      },
+
+      onPanResponderMove: (evt, gestureState) => {
+        const touches = evt.nativeEvent.touches;
+
+        if (touches.length === 2) {
+          const touch1 = touches[0];
+          const touch2 = touches[1];
+          const distance = Math.sqrt(
+            Math.pow(touch2.pageX - touch1.pageX, 2) +
+              Math.pow(touch2.pageY - touch1.pageY, 2),
+          );
+
+          if (initialDistance.current !== null) {
+            const newScale = Math.max(
+              1,
+              Math.min(4, lastScale.current * (distance / initialDistance.current)),
+            );
+            scale.setValue(newScale);
+          } else {
+            initialDistance.current = distance;
+          }
+        } else if (touches.length === 1 && lastScale.current > 1) {
+          translateX.setValue(lastTranslateX.current + gestureState.dx);
+          translateY.setValue(lastTranslateY.current + gestureState.dy);
+        }
+      },
+
+      onPanResponderRelease: () => {
+        const currentScale = (scale as any)._value;
+        lastScale.current = currentScale;
+        lastTranslateX.current = (translateX as any)._value;
+        lastTranslateY.current = (translateY as any)._value;
+        initialDistance.current = null;
+
+        if (currentScale < 1) {
+          Animated.parallel([
+            Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
+            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }),
+            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
+          ]).start();
+          lastScale.current = 1;
+          lastTranslateX.current = 0;
+          lastTranslateY.current = 0;
+        }
+      },
+    }),
+  ).current;
+
+  return (
+    <View style={{ width, height, alignItems: "center", justifyContent: "center" }}>
+      <Animated.Image
+        source={{ uri }}
+        style={{
+          width,
+          height,
+          transform: [{ scale }, { translateX }, { translateY }],
+        }}
+        resizeMode="contain"
+        {...panResponder.panHandlers}
+      />
+    </View>
+  );
+}
 
 type FreelancerProfile = {
   id: string;
@@ -48,6 +147,8 @@ export default function FreelancerProfilePage() {
   const [profile, setProfile] = useState<FreelancerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [startingChat, setStartingChat] = useState(false);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   useEffect(() => {
     if (id) fetchProfile();
@@ -75,6 +176,14 @@ export default function FreelancerProfilePage() {
       )
       .eq("user_id", id)
       .single();
+
+    console.log('Profile data:', JSON.stringify(data));
+    console.log('Portfolio URLs:', data?.portfolio_urls);
+    console.log('Error:', error?.message);
+
+    console.log('Profile data:', JSON.stringify(data));
+    console.log('Portfolio URLs:', data?.portfolio_urls);
+    console.log('Error:', error?.message);
 
     if (error) {
       console.log("Profile fetch error:", error.message);
@@ -173,7 +282,7 @@ export default function FreelancerProfilePage() {
   }
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.container} edges={["top"]}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity
@@ -181,7 +290,7 @@ export default function FreelancerProfilePage() {
           style={s.backBtn}
           activeOpacity={0.7}
         >
-          <Text style={s.backIcon}>{Icons.back}</Text>
+          <FeatherIcon name="arrow-left" size={24} color="black" style={s.backIcon} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Profile</Text>
         <View style={{ width: 36 }} />
@@ -232,33 +341,106 @@ export default function FreelancerProfilePage() {
         {/* Contact buttons */}
         <View style={s.contactSection}>
           <Button
-            label={startingChat ? "Opening..." : `${Icons.messages} Message`}
+            label={startingChat ? "Opening..." : "Message"}
             onPress={startChat}
             disabled={startingChat}
             loading={startingChat}
+            leftIcon={<FeatherIcon name="message-circle" size={18} color="white" />}
           />
         </View>
 
         <Divider />
 
         {/* Portfolio */}
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>Portfolio</Text>
+        <View style={s.portfolioSection}>
           {profile.portfolio_urls && profile.portfolio_urls.length > 0 ? (
-            <View style={s.portfolioGrid}>
-              {profile.portfolio_urls.map((url, i) => (
-                <Image key={i} source={{ uri: url }} style={s.portfolioImage} />
-              ))}
-            </View>
+            <>
+              <View style={{ paddingHorizontal: Layout.screenPadding, marginBottom: 10, marginTop: Spacing.sm }}>
+                <Text style={[TextStyles.label, s.sectionLabel]}>Portfolio</Text>
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2, width: SCREEN_WIDTH }}>
+                {profile.portfolio_urls.map((url, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => {
+                      setLightboxIndex(i);
+                      setLightboxVisible(true);
+                    }}
+                    activeOpacity={0.9}
+                  >
+                    <Image
+                      source={{ uri: url }}
+                      style={{
+                        width: CELL_SIZE,
+                        height: CELL_SIZE,
+                        backgroundColor: Colors.grey100,
+                      }}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
           ) : (
-            <View style={s.noPortfolioWrap}>
-              <Text style={s.noPortfolioText}>
-                No portfolio images added yet
-              </Text>
+            <View style={s.portfolioLabelWrap}>
+              <Text style={[TextStyles.label, s.sectionLabel]}>Portfolio</Text>
+              <View style={s.noPortfolio}>
+                <Text style={s.noPortfolioText}>No portfolio images added yet</Text>
+              </View>
             </View>
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={lightboxVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightboxVisible(false)}
+        statusBarTranslucent
+      >
+        <View style={s.lightboxContainer}>
+          <View style={s.lightboxOverlay} />
+
+          <View style={s.lightboxCounter}>
+            <Text style={s.lightboxCounterText}>
+              {lightboxIndex + 1} / {profile.portfolio_urls.length}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={s.lightboxClose}
+            onPress={() => setLightboxVisible(false)}
+            activeOpacity={0.7}
+          >
+            <FeatherIcon name="x" size={24} color={Colors.white} />
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            contentOffset={{ x: lightboxIndex * SCREEN_WIDTH, y: 0 }}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(
+                e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+              );
+              setLightboxIndex(index);
+            }}
+            style={s.lightboxScroll}
+          >
+            {profile.portfolio_urls.map((url, i) => (
+              <LightboxImage
+                key={i}
+                uri={url}
+                width={SCREEN_WIDTH}
+                height={SCREEN_HEIGHT}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -301,7 +483,7 @@ const s = StyleSheet.create({
   },
 
   // Profile top
-  scrollContent: { paddingBottom: Spacing.huge },
+  scrollContent: { paddingBottom: 100 },
   profileTop: {
     alignItems: "center",
     paddingTop: 28,
@@ -367,25 +549,65 @@ const s = StyleSheet.create({
   },
 
   // Portfolio
-  portfolioGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  portfolioImage: {
-    width: "31.5%",
-    aspectRatio: 1,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.grey100,
+  portfolioSection: {
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xs,
   },
-  noPortfolioWrap: {
+  portfolioLabelWrap: {
+    paddingHorizontal: Layout.screenPadding,
+    marginBottom: Spacing.xs,
+  },
+  noPortfolio: {
+    paddingHorizontal: Layout.screenPadding,
     paddingVertical: Spacing.xl,
-    alignItems: "center",
-    backgroundColor: Colors.offWhite,
-    borderRadius: Radius.md,
-    borderWidth: 0.5,
-    borderColor: Colors.grey100,
+    alignItems: "center" as const,
   },
   noPortfolioText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.md,
     color: Colors.grey300,
-    fontStyle: "italic",
+    fontStyle: "italic" as const,
+  },
+
+  // Lightbox
+  lightboxContainer: {
+    flex: 1,
+    backgroundColor: Colors.overlayDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lightboxOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.overlayDark,
+  },
+  lightboxCounter: {
+    position: "absolute",
+    top: 56,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 10,
+  },
+  lightboxCounterText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+    opacity: 0.8,
+  },
+  lightboxClose: {
+    position: "absolute",
+    top: 52,
+    right: Spacing.xl,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: Radius.full,
+  },
+  lightboxScroll: {
+    flex: 1,
+    width: SCREEN_WIDTH,
   },
 });

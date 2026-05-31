@@ -7,10 +7,10 @@ import {
   TextInput,
   FlatList,
   Modal,
-  SafeAreaView,
   Image,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
@@ -22,8 +22,7 @@ import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
 import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import Card from "../../components/ui/Card";
-import { Icons } from "../../constants/Icons";
+import { Feather } from "@expo/vector-icons";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
@@ -44,6 +43,8 @@ type Freelancer = {
   skill_names: string[];
 };
 
+const CARD_IMAGE_WIDTH = Layout.screenWidth - Layout.screenPadding * 2;
+
 export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useAuth();
@@ -57,6 +58,7 @@ export default function HomeScreen() {
   const [showCitySheet, setShowCitySheet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeIndex, setActiveIndex] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadInitialData();
@@ -152,12 +154,11 @@ export default function HomeScreen() {
   }, [selectedCity, selectedSkill]);
 
   const filtered = freelancers.filter((f) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      f.users?.name?.toLowerCase().includes(q) ||
-      f.skill_names.some((s) => s.toLowerCase().includes(q))
-    );
+    if (!search.trim()) return true;
+    const q = search.toLowerCase().trim();
+    const nameMatch = f.users?.name?.toLowerCase().includes(q);
+    const skillMatch = f.skill_names?.some((s) => s.toLowerCase().includes(q));
+    return nameMatch || skillMatch;
   });
 
   if (loading) {
@@ -165,7 +166,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.container} edges={["top"]}>
       {/* Top bar */}
       <View style={s.topBar}>
         <Text style={s.logo}>
@@ -180,13 +181,13 @@ export default function HomeScreen() {
           <Text style={s.cityPillText}>
             {selectedCity?.name ?? "Select city"}
           </Text>
-          <Text style={s.cityPillArrow}>{Icons.chevronDown}</Text>
+          <Feather name="chevron-down" size={12} color={Colors.grey500} />
         </TouchableOpacity>
       </View>
 
       {/* Search bar */}
       <View style={s.searchWrap}>
-        <Text style={s.searchIcon}>{Icons.search}</Text>
+        <Feather name="search" size={16} color={Colors.grey400} />
         <TextInput
           style={s.searchInput}
           placeholder="Search skill or name..."
@@ -194,10 +195,12 @@ export default function HomeScreen() {
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch("")}>
-            <Text style={s.searchClear}>{Icons.close}</Text>
+            <Feather name="x" size={16} color={Colors.grey500} />
           </TouchableOpacity>
         )}
       </View>
@@ -266,18 +269,20 @@ export default function HomeScreen() {
         }
         ListEmptyComponent={
           <EmptyState
-            icon={Icons.search}
+          icon="🔍"
             title="No freelancers here yet"
             subtitle="Be the first to join GetMe in this city"
           />
         }
+        nestedScrollEnabled={true}
         renderItem={({ item }) => (
-          <Card style={s.card}>
+          <View style={s.card}>
+
+            {/* PART 1 — Tappable header */}
             <TouchableOpacity
               onPress={() => router.push(`/freelancer/${item.user_id}`)}
-              activeOpacity={0.85}
+              activeOpacity={0.7}
             >
-              {/* Card header */}
               <View style={s.cardHeader}>
                 <Avatar
                   name={item.users?.name}
@@ -293,7 +298,6 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Skill tags */}
               {item.skill_names.length > 0 && (
                 <View style={s.tagsRow}>
                   {item.skill_names.slice(0, 4).map((tag, i) => (
@@ -303,25 +307,87 @@ export default function HomeScreen() {
                   ))}
                 </View>
               )}
-
-              {/* Portfolio strip or no preview message */}
-              {item.portfolio_urls && item.portfolio_urls.length > 0 ? (
-                <View style={s.portfolioStrip}>
-                  {item.portfolio_urls.slice(0, 3).map((url, i) => (
-                    <Image
-                      key={i}
-                      source={{ uri: url }}
-                      style={s.portfolioThumb}
-                    />
-                  ))}
-                </View>
-              ) : (
-                <View style={s.noPreviewWrap}>
-                  <Text style={s.noPreviewText}>No preview available</Text>
-                </View>
-              )}
             </TouchableOpacity>
-          </Card>
+
+            {/* PART 2 — Portfolio carousel (outside TouchableOpacity) */}
+            {item.portfolio_urls && item.portfolio_urls.length > 0 ? (
+              <View style={s.carouselWrap}>
+                {(() => {
+                  const displayUrls = item.portfolio_urls.slice(0, 5);
+                  const hasMore = item.portfolio_urls.length > 5;
+                  const carouselItems: string[] = hasMore
+                    ? [...displayUrls, "VIEW_MORE"]
+                    : displayUrls;
+                  const totalDots = carouselItems.length;
+                  return (
+                    <>
+                      <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        scrollEventThrottle={16}
+                        decelerationRate="fast"
+                        bounces={false}
+                        onScroll={(e) => {
+                          const offset = e.nativeEvent.contentOffset.x;
+                          const index = Math.round(offset / CARD_IMAGE_WIDTH);
+                          setActiveIndex((prev) => ({ ...prev, [item.id]: index }));
+                        }}
+                      >
+                        {carouselItems.map((url, i) =>
+                          url === "VIEW_MORE" ? (
+                            <TouchableOpacity
+                              key="view-more"
+                              style={s.viewMoreSlide}
+                              onPress={() => router.push(`/freelancer/${item.user_id}`)}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={s.viewMoreIcon}>🖼️</Text>
+                              <Text style={s.viewMoreText}>View all photos</Text>
+                              <Text style={s.viewMoreCount}>
+                                +{item.portfolio_urls.length - 5} more
+                              </Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              key={i}
+                              activeOpacity={0.95}
+                              onPress={() => router.push(`/freelancer/${item.user_id}`)}
+                            >
+                              <Image
+                                source={{ uri: url }}
+                                style={s.carouselImage}
+                                resizeMode="cover"
+                              />
+                            </TouchableOpacity>
+                          )
+                        )}
+                      </ScrollView>
+
+                      {totalDots > 1 && (
+                        <View style={s.dotsRow}>
+                          {Array.from({ length: totalDots }).map((_, i) => (
+                            <View
+                              key={i}
+                              style={[
+                                s.dot,
+                                i === (activeIndex[item.id] ?? 0) && s.dotActive,
+                              ]}
+                            />
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
+              </View>
+            ) : (
+              <View style={s.noPreviewWrap}>
+                <Text style={s.noPreviewText}>No preview available</Text>
+              </View>
+            )}
+
+          </View>
         )}
       />
 
@@ -360,7 +426,7 @@ export default function HomeScreen() {
                   {city.name}
                 </Text>
                 {selectedCity?.id === city.id && (
-                  <Text style={s.cityCheck}>{Icons.check}</Text>
+                  <Feather name="check" size={14} color={Colors.green} />
                 )}
               </TouchableOpacity>
             ))}
@@ -407,7 +473,7 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: Colors.black,
   },
-  cityPillArrow: { fontSize: FontSize.xs, color: Colors.grey500 },
+  cityPillArrow: { width: 12 }, // unused — Feather icon used
 
   // Search
   searchWrap: {
@@ -423,14 +489,14 @@ const s = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.border,
   },
-  searchIcon: { fontSize: FontSize.base },
+  searchIcon: { width: 16 }, // unused — Feather icon used
   searchInput: {
     flex: 1,
     fontFamily: FontFamily.regular,
     fontSize: FontSize.md,
     color: Colors.black,
   },
-  searchClear: { fontSize: 12, color: Colors.grey500, padding: 2 },
+  searchClear: { padding: 2 }, // unused — Feather icon used
 
   // Skills
   skillsScroll: { maxHeight: 44 },
@@ -475,15 +541,23 @@ const s = StyleSheet.create({
   },
 
   // List
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: 10 },
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: 10 },
 
   // Card
-  card: { padding: Spacing.md },
+  card: {
+    backgroundColor: Colors.white,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    overflow: "hidden",
+  },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   cardInfo: { flex: 1 },
   cardName: {
@@ -499,7 +573,13 @@ const s = StyleSheet.create({
   },
 
   // Tags
-  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginBottom: Spacing.sm },
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
   tag: {
     borderWidth: 0.5,
     borderColor: Colors.border,
@@ -513,23 +593,60 @@ const s = StyleSheet.create({
     color: Colors.grey500,
   },
 
-  // Portfolio
-  portfolioStrip: { flexDirection: "row", gap: 6 },
-  portfolioThumb: {
-    flex: 1,
-    height: 60,
-    borderRadius: Radius.sm,
+  // Portfolio carousel
+  carouselWrap: {
+    marginTop: Spacing.sm,
+    overflow: "hidden",
+    borderBottomLeftRadius: Radius.lg,
+    borderBottomRightRadius: Radius.lg,
+  },
+  carouselImage: {
+    width: CARD_IMAGE_WIDTH,
+    height: CARD_IMAGE_WIDTH * 0.6,
     backgroundColor: Colors.grey100,
   },
+  viewMoreSlide: {
+    width: CARD_IMAGE_WIDTH,
+    height: CARD_IMAGE_WIDTH * 0.6,
+    backgroundColor: Colors.grey100,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+  },
+  viewMoreIcon: { fontSize: 32 },
+  viewMoreText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  viewMoreCount: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
+
+  // Dot indicators
+  dotsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: Spacing.sm,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.grey300,
+  },
+  dotActive: { width: 6, height: 6, backgroundColor: Colors.black },
 
   // No preview
   noPreviewWrap: {
-    paddingVertical: 10,
     alignItems: "center",
+    justifyContent: "center",
+    height: 120,
     backgroundColor: Colors.offWhite,
-    borderRadius: Radius.sm,
-    borderWidth: 0.5,
-    borderColor: Colors.grey100,
   },
   noPreviewText: {
     fontFamily: FontFamily.regular,
@@ -575,9 +692,5 @@ const s = StyleSheet.create({
     color: Colors.black,
   },
   cityNameSelected: { fontFamily: FontFamily.medium },
-  cityCheck: {
-    fontSize: FontSize.md,
-    color: Colors.green,
-    fontFamily: FontFamily.medium,
-  },
+  // cityCheck removed — Feather icon used inline
 });

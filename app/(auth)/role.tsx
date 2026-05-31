@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Colors } from "../../constants/Colors";
@@ -6,26 +7,26 @@ import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Button from "../../components/ui/Button";
-import { Icons } from "../../constants/Icons";
+import FeatherIcon from "../../components/ui/FeatherIcon";
 
 const roles = [
   {
     id: "client",
     title: "I need to hire talent",
     sub: "Find skilled people in my city for projects",
-    icon: Icons.search,
+    icon: <FeatherIcon name="search" size={22} color="black" />,
   },
   {
     id: "freelancer",
     title: "I'm a freelancer",
     sub: "Showcase my skills and get discovered by clients",
-    icon: "💼",
+    icon: <FeatherIcon name="briefcase" size={22} color="black" />,
   },
   {
     id: "both",
     title: "Both",
     sub: "I hire people and also offer my own skills",
-    icon: "👥",
+    icon: <FeatherIcon name="users" size={22} color="black" />,
   },
 ];
 
@@ -40,7 +41,7 @@ export default function RoleScreen() {
   };
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={["top", "bottom"]}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <View style={s.progress}>
         {[0, 1, 2, 3, 4].map((i) => (
@@ -58,7 +59,7 @@ export default function RoleScreen() {
             activeOpacity={0.8}
           >
             <View style={[s.cardIcon, selected === r.id && s.cardIconSelected]}>
-              <Text style={{ fontSize: FontSize.xl }}>{r.icon}</Text>
+              {r.icon}
             </View>
             <View style={s.cardInfo}>
               <Text style={s.cardTitle}>{r.title}</Text>
@@ -66,7 +67,7 @@ export default function RoleScreen() {
             </View>
             <View style={[s.check, selected === r.id && s.checkSelected]}>
               {selected === r.id && (
-                <Text style={s.checkIcon}>{Icons.check}</Text>
+                <FeatherIcon name="check" size={14} color="white" style={s.checkIcon} />
               )}
             </View>
           </TouchableOpacity>
@@ -78,7 +79,7 @@ export default function RoleScreen() {
         disabled={!selected}
         style={s.continueBtn}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

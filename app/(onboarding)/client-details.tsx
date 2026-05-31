@@ -8,12 +8,13 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
-import { Icons } from "../../constants/Icons";
+import FeatherIcon from "../../components/ui/FeatherIcon";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
@@ -56,6 +57,7 @@ export default function ClientDetailsScreen() {
   };
 
   return (
+    <SafeAreaView style={s.safeArea} edges={["top"]}>
     <KeyboardAvoidingView
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -107,7 +109,7 @@ export default function ClientDetailsScreen() {
         />
 
         <View style={s.note}>
-          <Text style={s.noteIcon}>{Icons.messages}</Text>
+          <FeatherIcon name="message-circle" size={18} color={Colors.grey500} style={s.noteIcon} />
           <Text style={s.noteText}>
             Your name is shown to freelancers when you message them.
           </Text>
@@ -122,11 +124,13 @@ export default function ClientDetailsScreen() {
         />
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.white },
+  safeArea: { flex: 1, backgroundColor: Colors.white },
+  container: { flex: 1 },
   scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 60, paddingBottom: 40 },
   title: {
     fontFamily: FontFamily.medium,

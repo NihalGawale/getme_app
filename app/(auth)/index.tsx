@@ -1,131 +1,115 @@
-import { View, Text, StyleSheet, StatusBar } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  TouchableOpacity,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
-import Button from "../../components/ui/Button";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SplashScreen() {
   const router = useRouter();
   return (
-    <View style={s.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
-      <View style={s.top}>
-        <View style={s.icon}>
-          <Text style={s.iconText}>gm</Text>
+    <SafeAreaView style={s.container} edges={["top", "bottom"]}>
+      <View style={s.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.offWhite} />
+
+        {/* Center content */}
+        <View style={s.center}>
+          <View style={s.wordmarkRow}>
+            <Text style={s.wordmarkBlack}>Get </Text>
+            <Text style={s.wordmarkGreen}>Me</Text>
+          </View>
+          <View style={s.greenLine} />
         </View>
-        <View style={s.wordmarkRow}>
-          <Text style={s.wordBlack}>Get</Text>
-          <Text style={s.wordGreen}>Me</Text>
-        </View>
-        <Text style={s.tagline}>
-          Find skilled people in your city.{"\n"}Instantly.
-        </Text>
-        <View style={s.props}>
-          {[
-            "Videographers, photographers, editors & more",
-            "City-first. Real people. Real work.",
-            "Free forever. Built on trust.",
-          ].map((t, i) => (
-            <View key={i} style={s.propRow}>
-              <View style={s.dot} />
-              <Text style={s.propText}>{t}</Text>
-            </View>
-          ))}
+
+        {/* Bottom content */}
+        <View style={s.bottom}>
+          <Text style={s.tagline}>GetMe. Get Discovered.</Text>
+          <Text style={s.subtitle}>PREMIUM TALENT MARKETPLACE</Text>
+          <TouchableOpacity
+            style={s.btn}
+            onPress={() => router.push("/(auth)/role")}
+            activeOpacity={0.85}
+          >
+            <Text style={s.btnText}>Enter Experience →</Text>
+          </TouchableOpacity>
         </View>
       </View>
-      <View style={s.bottom}>
-        <Button
-          label="Get started"
-          onPress={() => router.push("/(auth)/role")}
-        />
-        <Button
-          label="I already have an account"
-          onPress={() => router.push("/(auth)/phone")}
-          variant="secondary"
-        />
-        <Text style={s.terms}>
-          By continuing you agree to our Terms & Privacy Policy
-        </Text>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.offWhite,
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: 60,
-    paddingBottom: 40,
+    paddingBottom: Spacing.xxxl,
     justifyContent: "space-between",
   },
-  top: { alignItems: "center", gap: Spacing.xl },
-  icon: {
-    width: 64,
-    height: 64,
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.lg,
+  },
+  wordmarkRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  wordmarkBlack: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 56,
+    color: Colors.black,
+    letterSpacing: -2,
+  },
+  wordmarkGreen: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 56,
+    color: Colors.green,
+    letterSpacing: -2,
+  },
+  greenLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: Colors.green,
+    borderRadius: Radius.full,
+  },
+  bottom: {
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  tagline: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.green,
+    letterSpacing: 2,
+    textAlign: "center",
+    marginBottom: Spacing.lg,
+  },
+  btn: {
+    width: "100%",
+    height: Layout.buttonHeight,
     backgroundColor: Colors.black,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
-  iconText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 26,
+  btnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
     color: Colors.white,
-    letterSpacing: -0.5,
-  },
-  wordmarkRow: { flexDirection: "row" },
-  wordBlack: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 42,
-    color: Colors.black,
-    letterSpacing: -1.5,
-  },
-  wordGreen: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 42,
-    color: Colors.green,
-    letterSpacing: -1.5,
-  },
-  tagline: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.grey500,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  props: { width: "100%", gap: Spacing.sm },
-  propRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-    backgroundColor: Colors.grey100,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-  },
-  dot: {
-    width: Spacing.sm,
-    height: Spacing.sm,
-    borderRadius: Spacing.xs,
-    backgroundColor: Colors.green,
-  },
-  propText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.grey500,
-    flex: 1,
-    lineHeight: 18,
-  },
-  bottom: { gap: Spacing.md },
-  terms: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: Colors.grey300,
-    textAlign: "center",
-    lineHeight: 16,
   },
 });

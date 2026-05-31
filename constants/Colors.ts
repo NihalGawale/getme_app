@@ -13,7 +13,7 @@ export const Colors = {
   grey700:      '#3D3D3A',
 
   // Accent — used sparingly
-  green:        '#1D9E75',
+  green:        '#1d9e75',
   greenLight:   '#E1F5EE',
   greenDark:    '#0F6E56',
 
@@ -30,4 +30,5 @@ export const Colors = {
   // Transparent overlays
   overlay:      'rgba(0,0,0,0.4)',
   overlayLight: 'rgba(0,0,0,0.08)',
+  overlayDark:  'rgba(0,0,0,0.97)',
 }

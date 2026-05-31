@@ -7,13 +7,14 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useFocusEffect } from "expo-router";
+import { Feather } from "@expo/vector-icons";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
@@ -172,12 +173,31 @@ export default function ChatScreen() {
     });
   };
 
+  const formatDateSeparator = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return "Today";
+    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "long",
+      year:
+        date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+    });
+  };
+
+  const isDifferentDay = (date1: string, date2: string): boolean => {
+    return new Date(date1).toDateString() !== new Date(date2).toDateString();
+  };
+
   if (loading) {
     return <LoadingScreen />;
   }
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.container} edges={["top", "bottom"]}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity
@@ -185,7 +205,7 @@ export default function ChatScreen() {
           style={s.backBtn}
           activeOpacity={0.7}
         >
-          <Text style={s.backIcon}>{Icons.back}</Text>
+          <Feather name="arrow-left" size={20} color={Colors.black} />
         </TouchableOpacity>
         <View style={s.headerUser}>
           <Avatar
@@ -213,18 +233,32 @@ export default function ChatScreen() {
             <Text style={s.emptyText}>Say hello to start the conversation</Text>
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const showDateSeparator =
+            index === 0 ||
+            isDifferentDay(messages[index - 1].created_at, item.created_at);
           const isMe = item.sender_id === user?.id;
           return (
-            <View style={[s.msgRow, isMe && s.msgRowMe]}>
-              <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
-                <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>
-                  {item.content}
+            <View>
+              {showDateSeparator && (
+                <View style={s.dateSeparator}>
+                  <View style={s.dateLine} />
+                  <Text style={s.dateText}>
+                    {formatDateSeparator(item.created_at)}
+                  </Text>
+                  <View style={s.dateLine} />
+                </View>
+              )}
+              <View style={[s.msgRow, isMe && s.msgRowMe]}>
+                <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
+                  <Text style={[s.bubbleText, isMe && s.bubbleTextMe]}>
+                    {item.content}
+                  </Text>
+                </View>
+                <Text style={[s.msgTime, isMe && s.msgTimeMe]}>
+                  {formatTime(item.created_at)}
                 </Text>
               </View>
-              <Text style={[s.msgTime, isMe && s.msgTimeMe]}>
-                {formatTime(item.created_at)}
-              </Text>
             </View>
           );
         }}
@@ -253,7 +287,7 @@ export default function ChatScreen() {
             activeOpacity={0.85}
             disabled={!input.trim() || sending}
           >
-            <Text style={s.sendBtnText}>{Icons.send}</Text>
+            <Feather name="send" size={18} color={Colors.white} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -327,6 +361,26 @@ const s = StyleSheet.create({
     paddingHorizontal: 2,
   },
   msgTimeMe: { textAlign: "right" },
+
+  // Date separators
+  dateSeparator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  dateLine: {
+    flex: 1,
+    height: 0.5,
+    backgroundColor: Colors.grey200,
+  },
+  dateText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey400,
+    paddingHorizontal: Spacing.sm,
+  },
 
   // Input bar
   inputBar: {

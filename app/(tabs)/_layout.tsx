@@ -1,36 +1,45 @@
 import { Tabs } from "expo-router";
 import { View, Text, StyleSheet } from "react-native";
 import { useEffect, useState } from "react";
+import { HouseIcon, ChatCircleIcon, UserIcon } from "phosphor-react-native";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { Colors } from "../../constants/Colors";
-import { FontFamily, FontSize } from "../../constants/Typography";
-import { Spacing, Radius } from "../../constants/Spacing";
-import { Layout } from "../../constants/Layout";
-import { Icons } from "../../constants/Icons";
+import { Radius } from "../../constants/Spacing";
 
 function TabIcon({
   icon,
-  label,
   focused,
   badge,
 }: {
-  icon: string;
-  label: string;
+  icon: "home" | "messages" | "profile";
   focused: boolean;
   badge?: number;
 }) {
+  const color = focused ? Colors.green : Colors.grey400;
+  const weight = focused ? "fill" : "light";
+
+  const renderIcon = () => {
+    switch (icon) {
+      case "home":
+        return <HouseIcon size={26} color={color} weight={weight} />;
+      case "messages":
+        return <ChatCircleIcon size={26} color={color} weight={weight} />;
+      case "profile":
+        return <UserIcon size={26} color={color} weight={weight} />;
+    }
+  };
+
   return (
     <View style={s.tabItem}>
       <View>
-        <Text style={[s.tabIcon, focused && s.tabIconActive]}>{icon}</Text>
+        {renderIcon()}
         {badge && badge > 0 ? (
           <View style={s.badge}>
             <Text style={s.badgeText}>{badge > 9 ? "9+" : badge}</Text>
           </View>
         ) : null}
       </View>
-      <Text style={[s.tabLabel, focused && s.tabLabelActive]}>{label}</Text>
     </View>
   );
 }
@@ -44,7 +53,7 @@ export default function TabLayout() {
       fetchUnreadCount();
       const unsub = subscribeToMessages();
 
-      const poll = setInterval(fetchUnreadCount, 4000);
+      const poll = setInterval(fetchUnreadCount, 5000);
 
       return () => {
         unsub();
@@ -121,15 +130,7 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={Icons.home} label="Home" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon={Icons.search} label="Search" focused={focused} />
+            <TabIcon icon="home" focused={focused} />
           ),
         }}
       />
@@ -137,12 +138,7 @@ export default function TabLayout() {
         name="messages"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon
-              icon={Icons.messages}
-              label="Messages"
-              focused={focused}
-              badge={unreadCount}
-            />
+            <TabIcon icon="messages" focused={focused} badge={unreadCount} />
           ),
         }}
       />
@@ -150,7 +146,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={Icons.profile} label="Profile" focused={focused} />
+            <TabIcon icon="profile" focused={focused} />
           ),
         }}
       />
@@ -161,20 +157,18 @@ export default function TabLayout() {
 const s = StyleSheet.create({
   tabBar: {
     borderTopWidth: 0.5,
-    borderTopColor: Colors.border,
+    borderTopColor: "#E8E8E8",
     backgroundColor: Colors.white,
-    height: Layout.tabBarHeight,
-    paddingBottom: 0,
+    height: 88,
+    paddingBottom: 28,
+    paddingTop: 10,
+    elevation: 0,
+    shadowOpacity: 0,
   },
-  tabItem: { alignItems: "center", gap: 3, paddingTop: Spacing.sm },
-  tabIcon: { fontSize: FontSize.xl, opacity: 0.4 },
-  tabIconActive: { opacity: 1 },
-  tabLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
-    color: Colors.grey500,
+  tabItem: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  tabLabelActive: { color: Colors.black },
   badge: {
     position: "absolute",
     top: -4,
@@ -188,8 +182,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: {
-    fontFamily: FontFamily.medium,
     fontSize: 9,
     color: Colors.white,
+    fontWeight: "500",
   },
 });

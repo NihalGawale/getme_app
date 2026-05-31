@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
@@ -20,22 +21,22 @@ import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
-import { Icons } from "../../constants/Icons";
+import FeatherIcon from "../../components/ui/FeatherIcon";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
 
 const DEFAULT_SKILLS = [
-  { id: "", name: "Photography", icon: Icons.photography },
-  { id: "", name: "Videography", icon: Icons.videography },
-  { id: "", name: "Video Editing", icon: Icons.videoEditing },
-  { id: "", name: "Graphic Design", icon: Icons.design },
-  { id: "", name: "Drone Operation", icon: Icons.drone },
-  { id: "", name: "Voice Over", icon: Icons.voiceOver },
-  { id: "", name: "DJ / Music", icon: Icons.music },
-  { id: "", name: "Copywriting", icon: Icons.copywriting },
-  { id: "", name: "Motion Graphics", icon: Icons.motionGraphics },
-  { id: "", name: "Social Media", icon: Icons.socialMedia },
+  { id: "", name: "Photography", icon: <FeatherIcon name="camera" size={22} color="#888" /> },
+  { id: "", name: "Videography", icon: <FeatherIcon name="video" size={22} color="#888" /> },
+  { id: "", name: "Video Editing", icon: <FeatherIcon name="scissors" size={22} color="#888" /> },
+  { id: "", name: "Graphic Design", icon: <FeatherIcon name="pen-tool" size={22} color="#888" /> },
+  { id: "", name: "Drone Operation", icon: <FeatherIcon name="navigation" size={22} color="#888" /> },
+  { id: "", name: "Voice Over", icon: <FeatherIcon name="mic" size={22} color="#888" /> },
+  { id: "", name: "DJ / Music", icon: <FeatherIcon name="music" size={22} color="#888" /> },
+  { id: "", name: "Copywriting", icon: <FeatherIcon name="edit-3" size={22} color="#888" /> },
+  { id: "", name: "Motion Graphics", icon: <FeatherIcon name="activity" size={22} color="#888" /> },
+  { id: "", name: "Social Media", icon: <FeatherIcon name="smartphone" size={22} color="#888" /> },
 ];
 
 export default function FreelancerProfileScreen() {
@@ -198,7 +199,7 @@ export default function FreelancerProfileScreen() {
   };
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -221,7 +222,7 @@ export default function FreelancerProfileScreen() {
             <Image source={{ uri: profilePhoto }} style={s.photo} />
           ) : (
             <View style={s.photoPlaceholder}>
-              <Text style={s.photoIcon}>{Icons.photography}</Text>
+              <FeatherIcon name="camera" size={24} color={"#888"} style={s.photoIcon} />
               <Text style={s.photoText}>Add photo</Text>
             </View>
           )}
@@ -265,7 +266,12 @@ export default function FreelancerProfileScreen() {
           >
             {selectedCity ? selectedCity.name : "Select your city"}
           </Text>
-          <Text style={s.dropdownArrow}>{showCityDropdown ? "▲" : "▼"}</Text>
+          <FeatherIcon
+            name={showCityDropdown ? "chevron-up" : "chevron-down"}
+            size={18}
+            color={"#888"}
+            style={s.dropdownArrow}
+          />
         </TouchableOpacity>
         {showCityDropdown && (
           <View style={s.dropdownList}>
@@ -291,7 +297,7 @@ export default function FreelancerProfileScreen() {
                   {city.name}
                 </Text>
                 {selectedCity?.id === city.id && (
-                  <Text style={s.checkmark}>{Icons.check}</Text>
+                  <FeatherIcon name="check" size={14} color="green" style={s.checkmark} />
                 )}
               </TouchableOpacity>
             ))}
@@ -314,7 +320,7 @@ export default function FreelancerProfileScreen() {
               onPress={() => toggleSkill(skill.id)}
               activeOpacity={0.8}
             >
-              <Text style={s.skillIcon}>{skill.icon}</Text>
+              <View style={s.skillIcon}>{skill.icon}</View>
               <Text
                 style={[
                   s.skillLabel,
@@ -330,7 +336,7 @@ export default function FreelancerProfileScreen() {
             onPress={() => setShowCustomSkill(!showCustomSkill)}
             activeOpacity={0.8}
           >
-            <Text style={s.skillIcon}>➕</Text>
+            <FeatherIcon name="plus" size={22} color="#888" style={s.skillIcon} />
             <Text style={s.skillLabel}>Add more</Text>
           </TouchableOpacity>
         </View>
@@ -410,13 +416,13 @@ export default function FreelancerProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 56, paddingBottom: Spacing.xl },
+  scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 56, paddingBottom: 100 },
   title: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.xxl,
