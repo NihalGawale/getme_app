@@ -9,12 +9,21 @@ import {
   Alert,
   Dimensions,
   Modal,
-  PanResponder,
-  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
+import {
+  GestureHandlerRootView,
+  GestureDetector,
+  Gesture,
+} from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  clamp,
+} from "react-native-reanimated";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
@@ -41,84 +50,75 @@ function LightboxImage({
   width: number;
   height: number;
 }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const lastScale = useRef(1);
-  const translateX = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(0)).current;
-  const lastTranslateX = useRef(0);
-  const lastTranslateY = useRef(0);
-  const initialDistance = useRef<number | null>(null);
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = clamp(savedScale.value * e.scale, 1, 4);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+      }
+    });
 
-      onPanResponderGrant: () => {
-        lastTranslateX.current = (translateX as any)._value;
-        lastTranslateY.current = (translateY as any)._value;
-      },
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (scale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
 
-      onPanResponderMove: (evt, gestureState) => {
-        const touches = evt.nativeEvent.touches;
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withSpring(2);
+        savedScale.value = 2;
+      }
+    });
 
-        if (touches.length === 2) {
-          const touch1 = touches[0];
-          const touch2 = touches[1];
-          const distance = Math.sqrt(
-            Math.pow(touch2.pageX - touch1.pageX, 2) +
-              Math.pow(touch2.pageY - touch1.pageY, 2),
-          );
+  const composed = Gesture.Simultaneous(pinchGesture, panGesture, doubleTapGesture);
 
-          if (initialDistance.current !== null) {
-            const newScale = Math.max(
-              1,
-              Math.min(4, lastScale.current * (distance / initialDistance.current)),
-            );
-            scale.setValue(newScale);
-          } else {
-            initialDistance.current = distance;
-          }
-        } else if (touches.length === 1 && lastScale.current > 1) {
-          translateX.setValue(lastTranslateX.current + gestureState.dx);
-          translateY.setValue(lastTranslateY.current + gestureState.dy);
-        }
-      },
-
-      onPanResponderRelease: () => {
-        const currentScale = (scale as any)._value;
-        lastScale.current = currentScale;
-        lastTranslateX.current = (translateX as any)._value;
-        lastTranslateY.current = (translateY as any)._value;
-        initialDistance.current = null;
-
-        if (currentScale < 1) {
-          Animated.parallel([
-            Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
-            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }),
-            Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
-          ]).start();
-          lastScale.current = 1;
-          lastTranslateX.current = 0;
-          lastTranslateY.current = 0;
-        }
-      },
-    }),
-  ).current;
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
 
   return (
-    <View style={{ width, height, alignItems: "center", justifyContent: "center" }}>
-      <Animated.Image
-        source={{ uri }}
-        style={{
-          width,
-          height,
-          transform: [{ scale }, { translateX }, { translateY }],
-        }}
-        resizeMode="contain"
-        {...panResponder.panHandlers}
-      />
-    </View>
+    <GestureHandlerRootView style={{ width, height }}>
+      <GestureDetector gesture={composed}>
+        <Animated.View style={{ width, height, alignItems: "center", justifyContent: "center" }}>
+          <Animated.Image
+            source={{ uri }}
+            style={[{ width, height }, animatedStyle]}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </GestureDetector>
+    </GestureHandlerRootView>
   );
 }
 
