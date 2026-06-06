@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useCallback } from "react";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
@@ -75,6 +75,8 @@ const uploadToCloudinary = async (uri: string): Promise<string | null> => {
 
 export default function ProfileScreen() {
   const { user, profile, refreshProfile, signOut } = useAuth();
+  // Inside the component
+  const router = useRouter();
 
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -99,6 +101,8 @@ export default function ProfileScreen() {
   const [cities, setCities] = useState<City[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [showCitySheet, setShowCitySheet] = useState(false);
+  const [photoChanged, setPhotoChanged] = useState(false);
+  const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
@@ -120,7 +124,7 @@ export default function ProfileScreen() {
     ] = await Promise.all([
       supabase
         .from("users")
-        .select("name, avatar_url, city_id")
+        .select("name, avatar_url, city_id, bio, looking_for, created_at")
         .eq("id", user.id)
         .single(),
       supabase
@@ -145,18 +149,33 @@ export default function ProfileScreen() {
     const ln = parts.slice(1).join(" ");
     const av = userData?.avatar_url ?? null;
     const cid = userData?.city_id ?? null;
-    const b = fpData?.bio ?? "";
-    const sk = fpData?.skills ?? [];
-    const pu = fpData?.portfolio_urls ?? [];
 
-    setFirstName(fn);
-    setLastName(ln);
-    setAvatarUrl(av);
-    setCityId(cid);
-    setBio(b);
-    setSelectedSkills(sk);
-    setPortfolioUrls(pu);
-    setOriginalData({ fn, ln, av, cid, b, sk, pu });
+    setUserCreatedAt(userData?.created_at ?? null);
+
+    if (profile?.role === "client") {
+      const b = userData?.bio ?? "";
+      const sk = (userData?.looking_for ?? []) as string[];
+      setFirstName(fn);
+      setLastName(ln);
+      setAvatarUrl(av);
+      setCityId(cid);
+      setBio(b);
+      setSelectedSkills(sk);
+      setPhotoChanged(false);
+      setOriginalData({ fn, ln, av, cid, b, sk });
+    } else {
+      const b = fpData?.bio ?? "";
+      const sk = fpData?.skills ?? [];
+      const pu = fpData?.portfolio_urls ?? [];
+      setFirstName(fn);
+      setLastName(ln);
+      setAvatarUrl(av);
+      setCityId(cid);
+      setBio(b);
+      setSelectedSkills(sk);
+      setPortfolioUrls(pu);
+      setOriginalData({ fn, ln, av, cid, b, sk, pu });
+    }
 
     setLoading(false);
   };
@@ -180,7 +199,8 @@ export default function ProfileScreen() {
     setCityId(originalData.cid);
     setBio(originalData.b);
     setSelectedSkills(originalData.sk);
-    setPortfolioUrls(originalData.pu);
+    if (profile?.role !== "client") setPortfolioUrls(originalData.pu);
+    setPhotoChanged(false);
     setIsEditing(false);
   };
 
@@ -199,17 +219,15 @@ export default function ProfileScreen() {
       return;
     }
 
-    const { error: fpErr } = await supabase
-      .from("freelancer_profiles")
-      .upsert(
-        {
-          user_id: user.id,
-          bio,
-          skills: selectedSkills,
-          portfolio_urls: portfolioUrls,
-        },
-        { onConflict: "user_id" },
-      );
+    const { error: fpErr } = await supabase.from("freelancer_profiles").upsert(
+      {
+        user_id: user.id,
+        bio,
+        skills: selectedSkills,
+        portfolio_urls: portfolioUrls,
+      },
+      { onConflict: "user_id" },
+    );
 
     if (fpErr) {
       setSaving(false);
@@ -246,6 +264,59 @@ export default function ProfileScreen() {
     if (url) setAvatarUrl(url);
   };
 
+  const handlePickAvatarClient = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled) return;
+    setAvatarUrl(result.assets[0].uri);
+    setPhotoChanged(true);
+  };
+
+  const handleClientSave = async () => {
+    if (!user?.id) return;
+    setSaving(true);
+
+    let finalAvatarUrl = avatarUrl;
+    if (photoChanged && avatarUrl) {
+      const uploaded = await uploadToCloudinary(avatarUrl);
+      if (uploaded) finalAvatarUrl = uploaded;
+    }
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        name: fullName,
+        avatar_url: finalAvatarUrl,
+        city_id: cityId,
+        bio: bio.trim() || null,
+        looking_for: selectedSkills,
+      })
+      .eq("id", user.id);
+
+    if (error) {
+      Alert.alert("Error", error.message);
+      setSaving(false);
+      return;
+    }
+
+    setAvatarUrl(finalAvatarUrl);
+    setPhotoChanged(false);
+    setOriginalData({
+      fn: firstName,
+      ln: lastName,
+      av: finalAvatarUrl,
+      cid: cityId,
+      b: bio,
+      sk: selectedSkills,
+    });
+    await refreshProfile();
+    setSaving(false);
+    setIsEditing(false);
+  };
+
   const handleAddPortfolioImage = async () => {
     if (portfolioUrls.length >= 9) return;
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -270,32 +341,183 @@ export default function ProfileScreen() {
     );
   };
 
+  // Sign out handler
+  const handleSignOut = async () => {
+    setShowMenu(false);
+    await signOut();
+    router.replace("/(auth)/");
+  };
+
   // ── Loading / client guard ────────────────────────────────────────────────
 
   if (loading) return <LoadingScreen />;
 
-  if (profile?.role === "client") {
-    return (
-      <SafeAreaView style={s.container} edges={["top"]}>
-        <View style={s.header}>
-          <Text style={s.headerTitle}>Profile</Text>
+  // ── Derived: member since ────────────────────────────────────────────────
+  const memberSince = userCreatedAt
+    ? new Date(userCreatedAt).toLocaleDateString("en-IN", {
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+
+  // ── Client content ────────────────────────────────────────────────────────
+  const clientContent = isEditing ? (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
+      <ScrollView
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Avatar */}
+        <View style={s.avatarSection}>
+          <Avatar name={fullName || profile?.name} uri={avatarUrl} size="xl" />
+          <TouchableOpacity
+            onPress={handlePickAvatarClient}
+            style={s.changePhotoBtn}
+          >
+            <Text style={s.changePhotoText}>Change photo</Text>
+          </TouchableOpacity>
         </View>
-        <Card style={s.infoCard}>
-          <View style={s.infoRow}>
-            <Text style={s.infoLabel}>Name</Text>
-            <Text style={s.infoValue}>{profile.name ?? "—"}</Text>
-          </View>
-          <View style={[s.infoRow, s.infoRowLast]}>
-            <Text style={s.infoLabel}>Phone</Text>
-            <Text style={s.infoValue}>{user?.phone ?? "—"}</Text>
-          </View>
-        </Card>
-        <TouchableOpacity style={s.signOutRow} onPress={signOut}>
-          <Text style={s.signOutText}>Sign out</Text>
+
+        {/* Name */}
+        <View style={s.nameRow}>
+          <TextInput
+            style={[s.textInput, { flex: 1 }]}
+            value={firstName}
+            onChangeText={setFirstName}
+            placeholder="First name"
+            placeholderTextColor={Colors.grey300}
+          />
+          <TextInput
+            style={[s.textInput, { flex: 1 }]}
+            value={lastName}
+            onChangeText={setLastName}
+            placeholder="Last name"
+            placeholderTextColor={Colors.grey300}
+          />
+        </View>
+
+        {/* City */}
+        <Text style={[TextStyles.label, s.sectionLabel]}>City</Text>
+        <TouchableOpacity
+          style={s.citySelector}
+          onPress={() => setShowCitySheet(true)}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={
+              selectedCity ? s.citySelectorText : s.citySelectorPlaceholder
+            }
+          >
+            {selectedCity?.name ?? "Select city"}
+          </Text>
+          <Feather name="chevron-down" size={14} color={Colors.grey500} />
         </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
+
+        {/* Bio */}
+        <Text style={[TextStyles.label, s.sectionLabel]}>ABOUT</Text>
+        <View style={s.bioWrap}>
+          <TextInput
+            style={s.bioInput}
+            value={bio}
+            onChangeText={setBio}
+            placeholder="Tell freelancers what kind of work you usually need..."
+            placeholderTextColor={Colors.grey300}
+            multiline
+            maxLength={200}
+            textAlignVertical="top"
+          />
+          <Text style={s.bioCounter}>{bio.length}/200</Text>
+        </View>
+
+        {/* Looking for */}
+        <Text style={[TextStyles.label, s.sectionLabel]}>
+          WHAT DO YOU NEED?
+        </Text>
+        <Text style={s.skillsSubtitle}>
+          Select skills you frequently look for
+        </Text>
+        <View style={s.skillsGrid}>
+          {skills.map((skill) => {
+            const active = selectedSkills.includes(skill.id);
+            return (
+              <TouchableOpacity
+                key={skill.id}
+                style={[s.skillTile, active && s.skillTileActive]}
+                onPress={() => toggleSkill(skill.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.skillTileIcon}>{skill.icon}</Text>
+                <Text
+                  style={[s.skillTileName, active && s.skillTileNameActive]}
+                >
+                  {skill.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={{ height: Spacing.huge }} />
+      </ScrollView>
+    </KeyboardAvoidingView>
+  ) : (
+    <ScrollView
+      contentContainerStyle={s.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Profile top */}
+      <View style={s.profileTop}>
+        <Avatar name={fullName || profile?.name} uri={avatarUrl} size="xl" />
+        <Text style={s.profileName}>{fullName || profile?.name}</Text>
+        <Text style={s.profileCity}>
+          {[
+            selectedCity?.name,
+            memberSince ? `Member since ${memberSince}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </Text>
+      </View>
+
+      <Divider />
+
+      {/* About */}
+      <View style={s.section}>
+        <Text style={[TextStyles.label, s.sectionLabel]}>ABOUT</Text>
+        {bio ? (
+          <Text style={s.bioText}>{bio}</Text>
+        ) : (
+          <Text style={s.emptyFieldText}>
+            Add a bio to tell freelancers about yourself
+          </Text>
+        )}
+      </View>
+
+      {/* Looking for */}
+      <View style={s.section}>
+        <Text style={[TextStyles.label, s.sectionLabel]}>LOOKING FOR</Text>
+        {skillObjects.length > 0 ? (
+          <View style={s.skillPills}>
+            {skillObjects.map((skill) => (
+              <View key={skill.id} style={s.skillPill}>
+                <Text style={s.skillPillText}>{skill.name}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={s.emptyFieldText}>
+            Add the skills you frequently need
+          </Text>
+        )}
+      </View>
+
+      <View style={{ height: Spacing.huge }} />
+    </ScrollView>
+  );
 
   // ── Freelancer view ───────────────────────────────────────────────────────
 
@@ -519,9 +741,11 @@ export default function ProfileScreen() {
     </ScrollView>
   );
 
-
   return (
-    <SafeAreaView style={[s.container, { position: 'relative', zIndex: 100 }]} edges={["top"]}> 
+    <SafeAreaView
+      style={[s.container, { position: "relative", zIndex: 100 }]}
+      edges={["top"]}
+    >
       {/* Header */}
       <View style={s.header}>
         {isEditing ? (
@@ -530,11 +754,18 @@ export default function ProfileScreen() {
               <Text style={s.headerAction}>Cancel</Text>
             </TouchableOpacity>
             <Text style={s.headerTitle}>Edit Profile</Text>
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
+            <TouchableOpacity
+              onPress={
+                profile?.role === "client" ? handleClientSave : handleSave
+              }
+              disabled={saving}
+            >
               {saving ? (
                 <ActivityIndicator color={Colors.green} size="small" />
               ) : (
-                <Text style={[s.headerAction, { color: Colors.green }]}>Save</Text>
+                <Text style={[s.headerAction, { color: Colors.green }]}>
+                  Save
+                </Text>
               )}
             </TouchableOpacity>
           </>
@@ -582,18 +813,20 @@ export default function ProfileScreen() {
               style={s.dropdownItem}
               onPress={() => {
                 setShowMenu(false);
-                signOut();
+                handleSignOut();
               }}
               activeOpacity={0.7}
             >
               <Feather name="log-out" size={16} color={Colors.danger} />
-              <Text style={[s.dropdownText, { color: Colors.danger }]}>Sign out</Text>
+              <Text style={[s.dropdownText, { color: Colors.danger }]}>
+                Sign out
+              </Text>
             </TouchableOpacity>
           </View>
         </>
       )}
 
-      {content}
+      {profile?.role === "client" ? clientContent : content}
 
       {/* City bottom sheet (inline, no Modal) */}
       {showCitySheet && (
@@ -618,7 +851,10 @@ export default function ProfileScreen() {
                   activeOpacity={0.8}
                 >
                   <Text
-                    style={[s.cityName, cityId === city.id && s.cityNameSelected]}
+                    style={[
+                      s.cityName,
+                      cityId === city.id && s.cityNameSelected,
+                    ]}
                   >
                     {city.name}
                   </Text>
@@ -931,7 +1167,7 @@ const s = StyleSheet.create({
   },
   // Dropdown menu styles
   menuDismiss: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
@@ -939,7 +1175,7 @@ const s = StyleSheet.create({
     zIndex: 98,
   },
   dropdown: {
-    position: 'absolute',
+    position: "absolute",
     top: 52, // height of header row
     right: Spacing.xl,
     backgroundColor: Colors.white,
@@ -955,8 +1191,8 @@ const s = StyleSheet.create({
     elevation: 8,
   },
   dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,

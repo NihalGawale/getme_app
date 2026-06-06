@@ -12,6 +12,9 @@ type UserProfile = {
   avatar_url: string | null;
   role: "freelancer" | "client" | null;
   city_id: string | null;
+  bio: string | null;
+  looking_for: string[] | null;
+  created_at: string | null;
 };
 
 type AuthContextType = {
@@ -69,17 +72,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchProfile = async (userId: string) => {
+    console.log("Fetching profile for:", userId);
+
     const { data, error } = await supabase
       .from("users")
-      .select("id, name, phone, email, avatar_url, role, city_id") // explicit fields
+      .select(
+        "id, name, phone, email, avatar_url, role, city_id, bio, looking_for, created_at",
+      )
       .eq("id", userId)
       .single();
 
-    if (error && error.code !== "PGRST116") {
-      console.log("Profile fetch error:", error.message);
-    }
+    console.log("Profile fetch result:", JSON.stringify(data));
+    console.log("Profile fetch error:", error?.message);
 
-    console.log("Fetched profile:", JSON.stringify(data)); // add this
     setProfile(data ?? null);
     setLoading(false);
   };
@@ -90,6 +95,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setSession(null);
+    setUser(null);
   };
 
   return (

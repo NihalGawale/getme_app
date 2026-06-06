@@ -43,6 +43,8 @@ export default function ChatScreen() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
+  const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  const [otherUserRole, setOtherUserRole] = useState<'client' | 'freelancer' | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -78,13 +80,18 @@ export default function ChatScreen() {
 
     if (!convo || !user) return;
 
-    const otherUserId =
+    const otherId =
       convo.client_id === user.id ? convo.freelancer_id : convo.client_id;
+    const role: 'client' | 'freelancer' =
+      convo.client_id === user.id ? 'freelancer' : 'client';
+
+    setOtherUserId(otherId);
+    setOtherUserRole(role);
 
     const { data } = await supabase
       .from("users")
       .select("name, avatar_url")
-      .eq("id", otherUserId)
+      .eq("id", otherId)
       .single();
 
     if (data) setOtherUser(data);
@@ -207,14 +214,26 @@ export default function ChatScreen() {
         >
           <Feather name="arrow-left" size={20} color={Colors.black} />
         </TouchableOpacity>
-        <View style={s.headerUser}>
+        <TouchableOpacity
+          style={s.headerUser}
+          onPress={() => {
+            if (!otherUserId) return;
+            if (otherUserRole === 'client') {
+              router.push(`/client/${otherUserId}`);
+            } else {
+              router.push(`/freelancer/${otherUserId}`);
+            }
+          }}
+          activeOpacity={0.7}
+        >
           <Avatar
             name={otherUser?.name}
             uri={otherUser?.avatar_url}
             size="sm"
           />
           <Text style={s.headerName}>{otherUser?.name ?? "Chat"}</Text>
-        </View>
+          <Feather name="chevron-right" size={14} color={Colors.grey400} />
+        </TouchableOpacity>
         <View style={{ width: 36 }} />
       </View>
 

@@ -21,7 +21,7 @@ import Input from "../../components/ui/Input";
 
 export default function PhoneScreen() {
   const router = useRouter();
-  const { role } = useLocalSearchParams<{ role: string }>();
+  const { role } = useLocalSearchParams<{ role?: string }>();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
 

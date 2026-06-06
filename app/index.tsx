@@ -9,6 +9,15 @@ export default function Index() {
   const [checkingProfile, setCheckingProfile] = useState(true);
   const [hasFreelancerProfile, setHasFreelancerProfile] = useState(false);
 
+  console.log("Index state:", {
+    loading,
+    checkingProfile,
+    hasSession: !!session,
+    role: profile?.role,
+    name: profile?.name,
+    userId: user?.id,
+  });
+
   useEffect(() => {
     // Wait until auth is fully loaded
     if (loading) return;

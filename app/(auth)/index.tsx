@@ -31,13 +31,21 @@ export default function SplashScreen() {
         {/* Bottom content */}
         <View style={s.bottom}>
           <Text style={s.tagline}>GetMe. Get Discovered.</Text>
-          <Text style={s.subtitle}>PREMIUM TALENT MARKETPLACE</Text>
+          <Text style={s.subtitle}>HYPERLOCAL DISCOVERY PLATFORM</Text>
           <TouchableOpacity
             style={s.btn}
             onPress={() => router.push("/(auth)/role")}
             activeOpacity={0.85}
           >
             <Text style={s.btnText}>Enter Experience →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.signInRow}
+            onPress={() => router.push("/(auth)/phone")}
+            activeOpacity={0.7}
+          >
+            <Text style={s.signInText}>Already have an account? </Text>
+            <Text style={s.signInLink}>Sign In</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -111,5 +119,21 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: FontSize.base,
     color: Colors.white,
+  },
+  signInRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: Spacing.lg,
+  },
+  signInText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
+  signInLink: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.green,
   },
 });
