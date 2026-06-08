@@ -6,6 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { Colors } from "../../constants/Colors";
 import { Radius } from "../../constants/Spacing";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 function TabIcon({
   icon,
@@ -24,9 +25,23 @@ function TabIcon({
       case "home":
         return <HouseIcon size={26} color={color} weight={weight} />;
       case "messages":
-        return <ChatCircleIcon size={26} color={color} weight={weight} />;
+        return (
+          <Ionicons
+            name="chatbubbles-sharp"
+            size={26}
+            color={color}
+            weight={weight}
+          />
+        );
       case "profile":
-        return <UserIcon size={26} color={color} weight={weight} />;
+        return (
+          <Ionicons
+            name="person-circle"
+            size={26}
+            color={color}
+            weight={weight}
+          />
+        );
     }
   };
 

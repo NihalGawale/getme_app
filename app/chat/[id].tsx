@@ -14,13 +14,12 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { useFocusEffect } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, AntDesign } from "@expo/vector-icons";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import Avatar from "../../components/ui/Avatar";
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { Icons } from "../../constants/Icons";
 
 type Message = {
   id: string;
@@ -44,7 +43,9 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
-  const [otherUserRole, setOtherUserRole] = useState<'client' | 'freelancer' | null>(null);
+  const [otherUserRole, setOtherUserRole] = useState<
+    "client" | "freelancer" | null
+  >(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -82,8 +83,8 @@ export default function ChatScreen() {
 
     const otherId =
       convo.client_id === user.id ? convo.freelancer_id : convo.client_id;
-    const role: 'client' | 'freelancer' =
-      convo.client_id === user.id ? 'freelancer' : 'client';
+    const role: "client" | "freelancer" =
+      convo.client_id === user.id ? "freelancer" : "client";
 
     setOtherUserId(otherId);
     setOtherUserRole(role);
@@ -137,13 +138,17 @@ export default function ChatScreen() {
 
   const markMessagesRead = async () => {
     if (!user?.id || !id) return;
-    console.log('Marking messages as read for conversation:', id);
-    const { data, error } = await supabase
-      .rpc('mark_messages_read', {
-        p_conversation_id: id,
-        p_user_id: user.id,
-      });
-    console.log('Marked read result:', data, 'messages updated, error:', error?.message);
+    console.log("Marking messages as read for conversation:", id);
+    const { data, error } = await supabase.rpc("mark_messages_read", {
+      p_conversation_id: id,
+      p_user_id: user.id,
+    });
+    console.log(
+      "Marked read result:",
+      data,
+      "messages updated, error:",
+      error?.message,
+    );
   };
 
   const sendMessage = async () => {
@@ -190,8 +195,7 @@ export default function ChatScreen() {
     return date.toLocaleDateString("en-IN", {
       day: "numeric",
       month: "long",
-      year:
-        date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+      year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
     });
   };
 
@@ -218,7 +222,7 @@ export default function ChatScreen() {
           style={s.headerUser}
           onPress={() => {
             if (!otherUserId) return;
-            if (otherUserRole === 'client') {
+            if (otherUserRole === "client") {
               router.push(`/client/${otherUserId}`);
             } else {
               router.push(`/freelancer/${otherUserId}`);
@@ -306,7 +310,7 @@ export default function ChatScreen() {
             activeOpacity={0.85}
             disabled={!input.trim() || sending}
           >
-            <Feather name="send" size={18} color={Colors.white} />
+            <AntDesign name="send" size={18} color={Colors.white} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -363,8 +367,14 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: Radius.lg,
   },
-  bubbleMe: { backgroundColor: Colors.black, borderBottomRightRadius: Radius.xs },
-  bubbleThem: { backgroundColor: Colors.grey100, borderBottomLeftRadius: Radius.xs },
+  bubbleMe: {
+    backgroundColor: Colors.green,
+    borderBottomRightRadius: Radius.xs,
+  },
+  bubbleThem: {
+    backgroundColor: Colors.grey100,
+    borderBottomLeftRadius: Radius.xs,
+  },
   bubbleText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
@@ -430,6 +440,7 @@ const s = StyleSheet.create({
     borderRadius: Radius.full,
     alignItems: "center",
     justifyContent: "center",
+    paddingLeft: 3,
   },
   sendBtnDisabled: { opacity: 0.3 },
   sendBtnText: {
