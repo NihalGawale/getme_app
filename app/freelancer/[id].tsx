@@ -149,10 +149,22 @@ export default function FreelancerProfilePage() {
   const [startingChat, setStartingChat] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [jobCount, setJobCount] = useState(0);
 
   useEffect(() => {
-    if (id) fetchProfile();
+    if (id) {
+      fetchProfile();
+      fetchJobCount();
+    }
   }, [id]);
+
+  const fetchJobCount = async () => {
+    const { count } = await supabase
+      .from("jobs")
+      .select("*", { count: "exact", head: true })
+      .eq("freelancer_id", id);
+    setJobCount(count ?? 0);
+  };
 
   const fetchProfile = async () => {
     const { data, error } = await supabase
@@ -312,6 +324,13 @@ export default function FreelancerProfilePage() {
             {profile.skill_names[0] ?? "Freelancer"} ·{" "}
             {profile.users?.cities?.name}
           </Text>
+          {jobCount > 0 && (
+            <View style={s.jobBadge}>
+              <Text style={s.jobBadgeText}>
+                {jobCount} {jobCount === 1 ? "job" : "jobs"} on GetMe
+              </Text>
+            </View>
+          )}
         </View>
 
         <Divider />
@@ -501,6 +520,20 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: FontSize.md,
     color: Colors.grey500,
+  },
+  jobBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.greenLight,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  jobBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    color: Colors.greenDark,
   },
 
   // Sections

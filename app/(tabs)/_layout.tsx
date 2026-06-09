@@ -67,9 +67,7 @@ export default function TabLayout() {
     if (user) {
       fetchUnreadCount();
       const unsub = subscribeToMessages();
-
-      const poll = setInterval(fetchUnreadCount, 5000);
-
+      const poll = setInterval(fetchUnreadCount, 2000);
       return () => {
         unsub();
         clearInterval(poll);
@@ -80,32 +78,36 @@ export default function TabLayout() {
   const fetchUnreadCount = async () => {
     if (!user?.id) return;
 
-    const { data: convos } = await supabase
-      .from("conversations")
-      .select("id")
-      .or(`client_id.eq.${user.id},freelancer_id.eq.${user.id}`);
+    try {
+      const { data: convos } = await supabase
+        .from("conversations")
+        .select("id")
+        .or(`client_id.eq.${user.id},freelancer_id.eq.${user.id}`);
 
-    if (!convos || convos.length === 0) {
-      setUnreadCount(0);
-      return;
+      if (!convos?.length) {
+        setUnreadCount(0);
+        return;
+      }
+
+      const convoIds = convos.map((c) => c.id);
+
+      const { count, error } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .in("conversation_id", convoIds)
+        .eq("is_read", false)
+        .neq("sender_id", user.id);
+
+      console.log("Unread count:", count, error?.message);
+      setUnreadCount(count ?? 0);
+    } catch (e) {
+      console.log("fetchUnreadCount error:", e);
     }
-
-    const convoIds = convos.map((c) => c.id);
-
-    const { count, error } = await supabase
-      .from("messages")
-      .select("*", { count: "exact", head: true })
-      .in("conversation_id", convoIds)
-      .eq("is_read", false)
-      .neq("sender_id", user.id);
-
-    console.log("Unread count:", count, "error:", error?.message);
-    setUnreadCount(count ?? 0);
   };
 
   const subscribeToMessages = () => {
     const subscription = supabase
-      .channel("tab-unread-count")
+      .channel("tab-badge-" + user?.id)
       .on(
         "postgres_changes",
         {
@@ -114,6 +116,7 @@ export default function TabLayout() {
           table: "messages",
         },
         () => {
+          console.log("New message — refreshing badge");
           fetchUnreadCount();
         },
       )
@@ -125,14 +128,16 @@ export default function TabLayout() {
           table: "messages",
         },
         () => {
+          console.log("Message updated — refreshing badge");
           fetchUnreadCount();
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Badge subscription status:", status);
+      });
 
     return () => subscription.unsubscribe();
   };
-
   return (
     <Tabs
       screenOptions={{
