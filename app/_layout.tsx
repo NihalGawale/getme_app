@@ -24,6 +24,7 @@ Notifications.setNotificationHandler({
 import Constants from "expo-constants";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import OfflineBanner from "../components/ui/OfflineBanner";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -80,6 +81,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
+          <OfflineBanner />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(onboarding)" />

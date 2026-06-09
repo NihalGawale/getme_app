@@ -42,7 +42,7 @@ export default function MessagesScreen() {
   useFocusEffect(
     useCallback(() => {
       if (user?.id) {
-        console.log('Messages tab focused - refetching conversations');
+        console.log("Messages tab focused - refetching conversations");
         fetchConversations();
       }
     }, [user?.id]),
@@ -184,11 +184,20 @@ export default function MessagesScreen() {
         onRefresh={fetchConversations}
         refreshing={false}
         ListEmptyComponent={
-          <EmptyState
-            icon={<FeatherIcon name="message-circle" size={36} color={Colors.grey300} />}
-            title="No messages yet"
-            subtitle="Find a freelancer and start a conversation"
-          />
+          <View style={s.emptyWrap}>
+            <Text style={s.emptyIcon}>💬</Text>
+            <Text style={s.emptyTitle}>No messages yet</Text>
+            <Text style={s.emptyText}>
+              Find a freelancer and start a conversation
+            </Text>
+            <TouchableOpacity
+              style={s.emptyBtn}
+              onPress={() => router.push("/(tabs)/")}
+              activeOpacity={0.85}
+            >
+              <Text style={s.emptyBtnText}>Browse freelancers →</Text>
+            </TouchableOpacity>
+          </View>
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -258,6 +267,43 @@ const s = StyleSheet.create({
   },
   listContent: { paddingTop: Spacing.sm, paddingBottom: 100 },
   emptyContainer: { flex: 1 },
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 100,
+    gap: Spacing.sm,
+    paddingHorizontal: Layout.screenPadding,
+  },
+  emptyIcon: {
+    fontSize: 40,
+    marginBottom: Spacing.sm,
+  },
+  emptyTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+    textAlign: "center",
+  },
+  emptyText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.md,
+    color: Colors.grey500,
+    textAlign: "center",
+    lineHeight: FontSize.md * 1.6,
+  },
+  emptyBtn: {
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.black,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+  },
+  emptyBtnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.white,
+  },
   convoRow: {
     flexDirection: "row",
     alignItems: "center",

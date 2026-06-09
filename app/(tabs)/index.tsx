@@ -9,9 +9,10 @@ import {
   Modal,
   Image,
   RefreshControl,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -26,21 +27,20 @@ import { Feather } from "@expo/vector-icons";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
-type Freelancer = {
+type FreelancerRow = {
   id: string;
   user_id: string;
-  bio: string;
+  bio: string | null;
   skills: string[];
+  skill_names: string[];
   portfolio_urls: string[];
-  whatsapp_number: string | null;
-  instagram_handle: string | null;
+  is_published: boolean;
   users: {
     name: string;
     avatar_url: string | null;
     city_id: string;
     cities: { name: string };
   };
-  skill_names: string[];
 };
 
 const CARD_IMAGE_WIDTH = Layout.screenWidth - Layout.screenPadding * 2;
@@ -49,7 +49,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useAuth();
 
-  const [freelancers, setFreelancers] = useState<Freelancer[]>([]);
+  const [freelancers, setFreelancers] = useState<FreelancerRow[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
@@ -97,54 +97,72 @@ export default function HomeScreen() {
   const fetchFreelancers = async () => {
     if (!selectedCity) return;
 
-    let query = supabase
-      .from("freelancer_profiles")
-      .select(
-        `
+    try {
+      let query = supabase
+        .from("freelancer_profiles")
+        .select(
+          `
         id,
         user_id,
         bio,
         skills,
         portfolio_urls,
+        is_published,
         whatsapp_number,
         instagram_handle,
         users!inner (
           name,
           avatar_url,
           city_id,
-          cities (name)
+          cities (
+            name
+          )
         )
       `,
-      )
-      .eq("is_published", true)
-      .eq("users.city_id", selectedCity.id)
-      .order("created_at", { ascending: false });
+        )
+        .eq("is_published", true)
+        .eq("users.city_id", selectedCity.id)
+        .order("created_at", { ascending: false });
 
-    if (selectedSkill) {
-      query = query.contains("skills", [selectedSkill]);
-    }
+      if (selectedSkill) {
+        query = query.contains("skills", [selectedSkill]);
+      }
 
-    const { data, error } = await query;
+      const { data, error } = await query;
 
-    if (error) {
-      console.log("Fetch error:", error.message);
-      return;
-    }
+      if (error) {
+        console.log("Fetch error:", error.message);
+        setFreelancers([]);
+        return;
+      }
 
-    const enriched = (data || []).map((f) => {
-      const user = Array.isArray(f.users) ? f.users[0] : f.users;
-      const cities = user?.cities;
-      const city = Array.isArray(cities) ? cities[0] : cities;
-      return {
-        ...f,
-        users: { ...user, cities: city },
-        skill_names: (f.skills || [])
+      const enriched = (data ?? []).map((f) => ({
+        id: f.id as string,
+        user_id: f.user_id as string,
+        bio: f.bio as string | null,
+        skills: f.skills as string[],
+        portfolio_urls: f.portfolio_urls as string[],
+        is_published: f.is_published as boolean,
+        whatsapp_number: f.whatsapp_number as string | null,
+        instagram_handle: f.instagram_handle as string | null,
+        users: {
+          name: (f.users as any)?.name as string,
+          avatar_url: (f.users as any)?.avatar_url as string | null,
+          city_id: (f.users as any)?.city_id as string,
+          cities: {
+            name: (f.users as any)?.cities?.name as string,
+          },
+        },
+        skill_names: ((f.skills as string[]) ?? [])
           .map((sid: string) => skills.find((s) => s.id === sid)?.name)
-          .filter(Boolean) as string[],
-      };
-    });
+          .filter((name): name is string => Boolean(name)),
+      }));
 
-    setFreelancers(enriched as Freelancer[]);
+      setFreelancers(enriched);
+    } catch (e) {
+      console.log("Network error:", e);
+      setFreelancers([]);
+    }
   };
 
   const onRefresh = useCallback(async () => {
@@ -161,8 +179,68 @@ export default function HomeScreen() {
     return nameMatch || skillMatch;
   });
 
+  function SkeletonCard() {
+    const opacity = useRef(new Animated.Value(0.4)).current;
+
+    useEffect(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.4,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    }, []);
+
+    return (
+      <Animated.View style={[sk.card, { opacity }]}>
+        <View style={sk.header}>
+          <View style={sk.avatar} />
+          <View style={sk.info}>
+            <View style={sk.nameLine} />
+            <View style={sk.subLine} />
+          </View>
+        </View>
+        <View style={sk.tagsRow}>
+          <View style={sk.tag} />
+          <View style={sk.tag} />
+          <View style={sk.tag} />
+        </View>
+        <View style={sk.image} />
+      </Animated.View>
+    );
+  }
+
   if (loading) {
-    return <LoadingScreen />;
+    return (
+      <SafeAreaView style={s.container} edges={["top"]}>
+        {/* Keep the top bar and search visible */}
+        <View style={s.topBar}>
+          <Text style={s.logo}>
+            Get<Text style={s.logoGreen}>Me</Text>
+          </Text>
+          <View style={s.cityPill}>
+            <Text style={s.cityPillDot}>●</Text>
+            <Text style={s.cityPillText}>
+              {selectedCity?.name ?? "Loading..."}
+            </Text>
+          </View>
+        </View>
+        {/* Skeleton cards */}
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </ScrollView>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -269,7 +347,7 @@ export default function HomeScreen() {
         }
         ListEmptyComponent={
           <EmptyState
-          icon="🔍"
+            icon="🔍"
             title="No freelancers here yet"
             subtitle="Be the first to join GetMe in this city"
           />
@@ -277,7 +355,6 @@ export default function HomeScreen() {
         nestedScrollEnabled={true}
         renderItem={({ item }) => (
           <View style={s.card}>
-
             {/* PART 1 — Tappable header */}
             <TouchableOpacity
               onPress={() => router.push(`/freelancer/${item.user_id}`)}
@@ -290,7 +367,9 @@ export default function HomeScreen() {
                   size="md"
                 />
                 <View style={s.cardInfo}>
-                  <Text style={s.cardName}>{item.users?.name ?? "Unknown"}</Text>
+                  <Text style={s.cardName}>
+                    {item.users?.name ?? "Unknown"}
+                  </Text>
                   <Text style={s.cardMeta}>
                     {item.skill_names[0] ?? "Freelancer"} ·{" "}
                     {item.users?.cities?.name}
@@ -331,7 +410,10 @@ export default function HomeScreen() {
                         onScroll={(e) => {
                           const offset = e.nativeEvent.contentOffset.x;
                           const index = Math.round(offset / CARD_IMAGE_WIDTH);
-                          setActiveIndex((prev) => ({ ...prev, [item.id]: index }));
+                          setActiveIndex((prev) => ({
+                            ...prev,
+                            [item.id]: index,
+                          }));
                         }}
                       >
                         {carouselItems.map((url, i) =>
@@ -339,11 +421,15 @@ export default function HomeScreen() {
                             <TouchableOpacity
                               key="view-more"
                               style={s.viewMoreSlide}
-                              onPress={() => router.push(`/freelancer/${item.user_id}`)}
+                              onPress={() =>
+                                router.push(`/freelancer/${item.user_id}`)
+                              }
                               activeOpacity={0.85}
                             >
                               <Text style={s.viewMoreIcon}>🖼️</Text>
-                              <Text style={s.viewMoreText}>View all photos</Text>
+                              <Text style={s.viewMoreText}>
+                                View all photos
+                              </Text>
                               <Text style={s.viewMoreCount}>
                                 +{item.portfolio_urls.length - 5} more
                               </Text>
@@ -352,7 +438,9 @@ export default function HomeScreen() {
                             <TouchableOpacity
                               key={i}
                               activeOpacity={0.95}
-                              onPress={() => router.push(`/freelancer/${item.user_id}`)}
+                              onPress={() =>
+                                router.push(`/freelancer/${item.user_id}`)
+                              }
                             >
                               <Image
                                 source={{ uri: url }}
@@ -360,7 +448,7 @@ export default function HomeScreen() {
                                 resizeMode="cover"
                               />
                             </TouchableOpacity>
-                          )
+                          ),
                         )}
                       </ScrollView>
 
@@ -371,7 +459,8 @@ export default function HomeScreen() {
                               key={i}
                               style={[
                                 s.dot,
-                                i === (activeIndex[item.id] ?? 0) && s.dotActive,
+                                i === (activeIndex[item.id] ?? 0) &&
+                                  s.dotActive,
                               ]}
                             />
                           ))}
@@ -386,7 +475,6 @@ export default function HomeScreen() {
                 <Text style={s.noPreviewText}>No preview available</Text>
               </View>
             )}
-
           </View>
         )}
       />
@@ -500,7 +588,11 @@ const s = StyleSheet.create({
 
   // Skills
   skillsScroll: { maxHeight: 44 },
-  skillsRow: { paddingHorizontal: Spacing.lg, gap: Spacing.sm, paddingBottom: Spacing.xs },
+  skillsRow: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+    paddingBottom: Spacing.xs,
+  },
   skillChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -693,4 +785,58 @@ const s = StyleSheet.create({
   },
   cityNameSelected: { fontFamily: FontFamily.medium },
   // cityCheck removed — Feather icon used inline
+});
+
+const sk = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.white,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginHorizontal: Layout.screenPadding,
+    marginBottom: Spacing.sm,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.grey100,
+  },
+  info: { flex: 1, gap: 6 },
+  nameLine: {
+    width: "50%",
+    height: 14,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.grey100,
+  },
+  subLine: {
+    width: "35%",
+    height: 11,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.grey100,
+  },
+  tagsRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  tag: {
+    width: 64,
+    height: 24,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.grey100,
+  },
+  image: {
+    width: "100%",
+    height: 160,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.grey100,
+  },
 });

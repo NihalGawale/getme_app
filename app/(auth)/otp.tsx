@@ -8,123 +8,188 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { useRouter, useLocalSearchParams } from 'expo-router'
-import { useState, useRef } from 'react'
-import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../context/AuthContext'
-import { Colors } from '../../constants/Colors'
-import { FontFamily, FontSize } from '../../constants/Typography'
-import { Spacing, Radius } from '../../constants/Spacing'
-import { Layout } from '../../constants/Layout'
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useState, useRef, useEffect } from "react";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../context/AuthContext";
+import { Colors } from "../../constants/Colors";
+import { FontFamily, FontSize } from "../../constants/Typography";
+import { Spacing, Radius } from "../../constants/Spacing";
+import { Layout } from "../../constants/Layout";
 
 export default function OTPScreen() {
-  const router = useRouter()
-  const { phone, role } = useLocalSearchParams<{ phone: string; role: string }>()
-  const { refreshProfile } = useAuth()
-  const [otp, setOtp] = useState('')
-  const [loading, setLoading] = useState(false)
-  const inputRef = useRef<TextInput>(null)
+  const router = useRouter();
+  const { phone, role } = useLocalSearchParams<{
+    phone: string;
+    role: string;
+  }>();
+  const { refreshProfile } = useAuth();
+  const [otp, setOtp] = useState(""); // Add resend state at top of component
+  const [loading, setLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  // Add timer effect
+  useEffect(() => {
+    if (resendTimer === 0) {
+      setCanResend(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [resendTimer]);
+
+  const handleResend = async () => {
+    if (!canResend) return;
+    setCanResend(false);
+    setResendTimer(30);
+    setOtp("");
+
+    const { error } = await supabase.auth.signInWithOtp({
+      phone,
+    });
+
+    if (error) {
+      Alert.alert("Error", error.message);
+    }
+  };
 
   const handleOtpChange = (value: string) => {
-    const cleaned = value.replace(/\D/g, '').slice(0, 6)
-    setOtp(cleaned)
+    const cleaned = value.replace(/\D/g, "").slice(0, 6);
+    setOtp(cleaned);
     if (cleaned.length === 6) {
-      handleVerify(cleaned)
+      handleVerify(cleaned);
     }
-  }
+  };
 
   const handleVerify = async (code?: string) => {
-    const otpCode = code ?? otp
-    if (otpCode.length < 6) return
+    const otpCode = code ?? otp;
+    if (otpCode.length < 6) return;
 
-    setLoading(true)
+    setLoading(true);
 
     const { data, error } = await supabase.auth.verifyOtp({
       phone,
       token: otpCode,
-      type: 'sms',
-    })
+      type: "sms",
+    });
 
     if (error) {
-      setLoading(false)
-      setOtp('')
-      Alert.alert('Invalid code', 'Please check the code and try again.')
-      inputRef.current?.focus()
-      return
+      setLoading(false);
+      setOtp("");
+      Alert.alert("Invalid code", "Please check the code and try again.");
+      inputRef.current?.focus();
+      return;
     }
 
-    const userId = data.session?.user?.id
-    const userPhone = data.session?.user?.phone ?? null
-    const userEmail = data.session?.user?.email ?? null
+    const userId = data.session?.user?.id;
+    const userPhone = data.session?.user?.phone ?? null;
+    const userEmail = data.session?.user?.email ?? null;
 
     if (!userId) {
-      setLoading(false)
-      Alert.alert('Error', 'Session error. Please try again.')
-      return
+      setLoading(false);
+      Alert.alert("Error", "Session error. Please try again.");
+      return;
     }
 
+    // Check if existing user
     const { data: existingUser } = await supabase
-      .from('users')
-      .select('id, role, name')
-      .eq('id', userId)
-      .single()
+      .from("users")
+      .select("id, role, name")
+      .eq("id", userId)
+      .single();
 
     if (existingUser) {
-      await refreshProfile()
-      setLoading(false)
+      // Check if user is trying to sign up with a different role
+      if (
+        role &&
+        existingUser.role &&
+        role !== existingUser.role &&
+        role !== "both"
+      ) {
+        setLoading(false);
+        Alert.alert(
+          "Account already exists",
+          `This number is already registered as a ${existingUser.role}. Please sign in instead.`,
+          [
+            {
+              text: "Sign in",
+              onPress: async () => {
+                await refreshProfile();
+                router.replace("/(tabs)/");
+              },
+            },
+            {
+              text: "Cancel",
+              onPress: () => {
+                router.replace("/(auth)/");
+              },
+              style: "cancel",
+            },
+          ],
+        );
+        return;
+      }
 
-      if (existingUser.role === 'freelancer') {
+      // Existing user with same role — go home
+      await refreshProfile();
+      setLoading(false);
+
+      if (existingUser.role === "freelancer") {
         const { data: fp } = await supabase
-          .from('freelancer_profiles')
-          .select('id')
-          .eq('user_id', userId)
-          .single()
+          .from("freelancer_profiles")
+          .select("id")
+          .eq("user_id", userId)
+          .single();
         if (!fp) {
-          router.replace('/(onboarding)/freelancer-profile')
-          return
+          router.replace("/(onboarding)/freelancer-profile");
+          return;
         }
       }
 
-      if (existingUser.role === 'client' && !existingUser.name) {
-        router.replace('/(onboarding)/client-details')
-        return
+      if (existingUser.role === "client" && !existingUser.name) {
+        router.replace("/(onboarding)/client-details");
+        return;
       }
 
-      router.replace('/(tabs)/')
-      return
+      router.replace("/(tabs)/");
+      return;
     }
 
     // New user
-    const { error: upsertError } = await supabase.from('users').upsert({
+    const { error: upsertError } = await supabase.from("users").upsert({
       id: userId,
       phone: userPhone,
       email: userEmail || null,
-      role: role || 'client',
-    })
+      role: role || "client",
+    });
 
     if (upsertError) {
-      setLoading(false)
-      Alert.alert('Error', upsertError.message)
-      return
+      setLoading(false);
+      Alert.alert("Error", upsertError.message);
+      return;
     }
 
-    await refreshProfile()
-    setLoading(false)
+    await refreshProfile();
+    setLoading(false);
 
-    if (role === 'freelancer') {
-      router.replace('/(onboarding)/freelancer-profile')
+    if (role === "freelancer") {
+      router.replace("/(onboarding)/freelancer-profile");
     } else {
-      router.replace('/(onboarding)/client-details')
+      router.replace("/(onboarding)/client-details");
     }
-  }
+  };
 
   return (
-    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={s.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         style={s.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
 
@@ -139,7 +204,6 @@ export default function OTPScreen() {
 
         {/* OTP container: visual boxes + real input overlay */}
         <View style={s.otpContainer}>
-
           {/* Visual boxes — display only, no touch events */}
           <View style={s.otpBoxesRow} pointerEvents="none">
             {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -151,7 +215,7 @@ export default function OTPScreen() {
                   otp.length > i && s.otpBoxFilled,
                 ]}
               >
-                <Text style={s.otpDigit}>{otp[i] ?? ''}</Text>
+                <Text style={s.otpDigit}>{otp[i] ?? ""}</Text>
               </View>
             ))}
           </View>
@@ -174,9 +238,15 @@ export default function OTPScreen() {
         </View>
 
         <View style={s.resendRow}>
-          <Text style={s.resendLabel}>Didn't receive it?</Text>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={s.resendLink}>Change number</Text>
+          <Text style={s.resendTimer}>Didn't receive it?</Text>
+          <TouchableOpacity
+            onPress={handleResend}
+            disabled={!canResend}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.resendLink, !canResend && s.resendDisabled]}>
+              {canResend ? "Resend OTP" : `Resend in ${resendTimer}s`}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -188,11 +258,11 @@ export default function OTPScreen() {
           activeOpacity={0.85}
           disabled={otp.length < 6 || loading}
         >
-          <Text style={s.btnText}>{loading ? 'Verifying...' : 'Verify'}</Text>
+          <Text style={s.btnText}>{loading ? "Verifying..." : "Verify"}</Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  )
+  );
 }
 
 const s = StyleSheet.create({
@@ -205,8 +275,13 @@ const s = StyleSheet.create({
   },
 
   // Progress bar
-  progress: { flexDirection: 'row', gap: Spacing.xs, marginBottom: 28 },
-  bar: { flex: 1, height: 3, borderRadius: Radius.full, backgroundColor: Colors.grey200 },
+  progress: { flexDirection: "row", gap: Spacing.xs, marginBottom: 28 },
+  bar: {
+    flex: 1,
+    height: 3,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.grey200,
+  },
   barActive: { backgroundColor: Colors.black },
 
   // Heading
@@ -225,18 +300,18 @@ const s = StyleSheet.create({
 
   // OTP container
   otpContainer: {
-    position: 'relative',
+    position: "relative",
     height: 56,
     marginBottom: Spacing.md,
     zIndex: 999,
   },
   otpBoxesRow: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.sm,
   },
   otpBox: {
@@ -245,8 +320,8 @@ const s = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.grey200,
     borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Colors.white,
   },
   otpBoxActive: {
@@ -263,14 +338,14 @@ const s = StyleSheet.create({
     color: Colors.black,
   },
   realInput: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
     opacity: 0.01,
-    color: 'transparent',
-    backgroundColor: 'transparent',
+    color: "transparent",
+    backgroundColor: "transparent",
     zIndex: 999,
     fontSize: 40,
     letterSpacing: 38,
@@ -278,9 +353,9 @@ const s = StyleSheet.create({
 
   // Resend row
   resendRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   resendLabel: {
     fontFamily: FontFamily.regular,
@@ -292,14 +367,22 @@ const s = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.black,
   },
+  resendDisabled: {
+    color: Colors.grey300,
+  },
+  resendTimer: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey300,
+  },
 
   // Verify button
   btn: {
     backgroundColor: Colors.black,
     borderRadius: Radius.md,
     height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   btnDisabled: { opacity: 0.4 },
   btnText: {

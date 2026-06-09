@@ -1,25 +1,26 @@
 import {
   View,
   Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
-  StatusBar,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
-import FeatherIcon from "../../components/ui/FeatherIcon";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
-import Button from "../../components/ui/Button";
-import Input from "../../components/ui/Input";
+
+type City = { id: string; name: string };
 
 export default function ClientDetailsScreen() {
   const router = useRouter();
@@ -28,9 +29,28 @@ export default function ClientDetailsScreen() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [selectedCity, setSelectedCity] = useState<City | null>(null);
+  const [cities, setCities] = useState<City[]>([]);
+  const [showCitySheet, setShowCitySheet] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0;
+  useEffect(() => {
+    fetchCities();
+  }, []);
+
+  const fetchCities = async () => {
+    const { data } = await supabase
+      .from("cities")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("name");
+    if (data) setCities(data);
+  };
+
+  const canSubmit =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    selectedCity !== null;
 
   const handleSubmit = async () => {
     if (!canSubmit || !user) return;
@@ -42,6 +62,7 @@ export default function ClientDetailsScreen() {
       .update({
         name: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim() || null,
+        city_id: selectedCity!.id,
       })
       .eq("id", user.id);
 
@@ -57,12 +78,10 @@ export default function ClientDetailsScreen() {
   };
 
   return (
-    <SafeAreaView style={s.safeArea} edges={["top"]}>
     <KeyboardAvoidingView
       style={s.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -70,68 +89,141 @@ export default function ClientDetailsScreen() {
       >
         <Text style={s.title}>Almost there</Text>
         <Text style={s.sub}>
-          Tell us your name so freelancers know who they're talking to.
+          Tell us a bit about yourself so freelancers know who they're talking
+          to.
         </Text>
 
+        {/* Full name */}
         <Text style={s.label}>
           Full name <Text style={s.required}>*</Text>
         </Text>
         <View style={s.nameRow}>
-          <View style={{ flex: 1 }}>
-            <Input
-              placeholder="First name"
-              value={firstName}
-              onChangeText={setFirstName}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Input
-              placeholder="Last name"
-              value={lastName}
-              onChangeText={setLastName}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
+          <TextInput
+            style={[s.input, { flex: 1 }]}
+            placeholder="First name"
+            placeholderTextColor={Colors.grey300}
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          <TextInput
+            style={[s.input, { flex: 1 }]}
+            placeholder="Last name"
+            placeholderTextColor={Colors.grey300}
+            value={lastName}
+            onChangeText={setLastName}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
         </View>
 
-        <Input
-          label="Email"
+        {/* City */}
+        <Text style={s.label}>
+          City <Text style={s.required}>*</Text>
+        </Text>
+        <TouchableOpacity
+          style={s.dropdown}
+          onPress={() => setShowCitySheet(true)}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={selectedCity ? s.dropdownSelected : s.dropdownPlaceholder}
+          >
+            {selectedCity ? selectedCity.name : "Select your city"}
+          </Text>
+          <Text style={s.dropdownArrow}>▾</Text>
+        </TouchableOpacity>
+
+        {/* Email */}
+        <Text style={s.label}>Email</Text>
+        <TextInput
+          style={s.input}
           placeholder="you@example.com"
+          placeholderTextColor={Colors.grey300}
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
-          hint="Optional"
         />
+        <Text style={s.optional}>Optional</Text>
 
+        {/* Note */}
         <View style={s.note}>
-          <FeatherIcon name="message-circle" size={18} color={Colors.grey500} style={s.noteIcon} />
           <Text style={s.noteText}>
-            Your name is shown to freelancers when you message them.
+            💬 Your name is shown to freelancers when you message them.
           </Text>
         </View>
 
-        <Button
-          label="Continue"
+        {/* Submit */}
+        <TouchableOpacity
+          style={[s.btn, (!canSubmit || loading) && s.btnDisabled]}
           onPress={handleSubmit}
-          loading={loading}
-          disabled={!canSubmit}
-          style={s.submitBtn}
-        />
+          activeOpacity={0.85}
+          disabled={!canSubmit || loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={Colors.white} />
+          ) : (
+            <Text style={s.btnText}>Continue</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
+
+      {/* City bottom sheet */}
+      <Modal
+        visible={showCitySheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCitySheet(false)}
+      >
+        <TouchableOpacity
+          style={s.overlay}
+          activeOpacity={1}
+          onPress={() => setShowCitySheet(false)}
+        />
+        <View style={s.sheet}>
+          <View style={s.sheetHandle} />
+          <Text style={s.sheetTitle}>Select your city</Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {cities.map((city) => (
+              <TouchableOpacity
+                key={city.id}
+                style={s.cityItem}
+                onPress={() => {
+                  setSelectedCity(city);
+                  setShowCitySheet(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    s.cityName,
+                    selectedCity?.id === city.id && s.cityNameSelected,
+                  ]}
+                >
+                  {city.name}
+                </Text>
+                {selectedCity?.id === city.id && (
+                  <Text style={s.cityCheck}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
-    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.white },
-  container: { flex: 1 },
-  scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 60, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: Colors.white },
+  scroll: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: 60,
+    paddingBottom: 40,
+  },
   title: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.xxl,
@@ -142,34 +234,129 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: FontSize.md,
     color: Colors.grey500,
-    marginBottom: 28,
-    lineHeight: 20,
+    marginBottom: Spacing.xxl,
+    lineHeight: FontSize.md * 1.6,
   },
   label: {
     fontFamily: FontFamily.medium,
-    fontSize: FontSize.md,
+    fontSize: FontSize.sm,
     color: Colors.black,
     marginBottom: Spacing.sm,
     marginTop: Spacing.xl,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   required: { color: Colors.danger },
-  nameRow: { flexDirection: "row", gap: 10 },
-  note: {
+  optional: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey300,
+    marginTop: Spacing.xs,
+  },
+  nameRow: { flexDirection: "row", gap: Spacing.sm },
+  input: {
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    fontSize: FontSize.base,
+    fontFamily: FontFamily.regular,
+    color: Colors.black,
+    height: 48,
+  },
+  dropdown: {
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    height: 48,
     flexDirection: "row",
-    gap: Spacing.sm,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  dropdownSelected: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  dropdownPlaceholder: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.grey300,
+  },
+  dropdownArrow: {
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+  },
+  note: {
     backgroundColor: Colors.grey100,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: Spacing.md,
-    alignItems: "flex-start",
     marginTop: Spacing.xl,
   },
-  noteIcon: { fontSize: FontSize.md },
   noteText: {
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: FontSize.sm,
     color: Colors.grey500,
-    flex: 1,
-    lineHeight: 18,
+    lineHeight: FontSize.sm * 1.6,
   },
-  submitBtn: { marginTop: 28 },
+  btn: {
+    backgroundColor: Colors.black,
+    borderRadius: Radius.md,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: Spacing.xxl,
+  },
+  btnDisabled: { opacity: 0.4 },
+  btnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.white,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+  },
+  sheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    padding: Spacing.xl,
+    maxHeight: "60%",
+  },
+  sheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: Colors.grey200,
+    borderRadius: Radius.full,
+    alignSelf: "center",
+    marginBottom: Spacing.lg,
+  },
+  sheetTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    marginBottom: Spacing.md,
+  },
+  cityItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.grey100,
+  },
+  cityName: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  cityNameSelected: { fontWeight: "500" },
+  cityCheck: {
+    fontSize: FontSize.sm,
+    color: Colors.green,
+    fontWeight: "500",
+  },
 });

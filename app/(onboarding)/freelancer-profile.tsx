@@ -27,16 +27,56 @@ type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
 
 const DEFAULT_SKILLS = [
-  { id: "", name: "Photography", icon: <FeatherIcon name="camera" size={22} color="#888" /> },
-  { id: "", name: "Videography", icon: <FeatherIcon name="video" size={22} color="#888" /> },
-  { id: "", name: "Video Editing", icon: <FeatherIcon name="scissors" size={22} color="#888" /> },
-  { id: "", name: "Graphic Design", icon: <FeatherIcon name="pen-tool" size={22} color="#888" /> },
-  { id: "", name: "Drone Operation", icon: <FeatherIcon name="navigation" size={22} color="#888" /> },
-  { id: "", name: "Voice Over", icon: <FeatherIcon name="mic" size={22} color="#888" /> },
-  { id: "", name: "DJ / Music", icon: <FeatherIcon name="music" size={22} color="#888" /> },
-  { id: "", name: "Copywriting", icon: <FeatherIcon name="edit-3" size={22} color="#888" /> },
-  { id: "", name: "Motion Graphics", icon: <FeatherIcon name="activity" size={22} color="#888" /> },
-  { id: "", name: "Social Media", icon: <FeatherIcon name="smartphone" size={22} color="#888" /> },
+  {
+    id: "",
+    name: "Photography",
+    icon: <FeatherIcon name="camera" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Videography",
+    icon: <FeatherIcon name="video" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Video Editing",
+    icon: <FeatherIcon name="scissors" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Graphic Design",
+    icon: <FeatherIcon name="pen-tool" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Drone Operation",
+    icon: <FeatherIcon name="navigation" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Voice Over",
+    icon: <FeatherIcon name="mic" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "DJ / Music",
+    icon: <FeatherIcon name="music" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Copywriting",
+    icon: <FeatherIcon name="edit-3" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Motion Graphics",
+    icon: <FeatherIcon name="activity" size={22} color="#888" />,
+  },
+  {
+    id: "",
+    name: "Social Media",
+    icon: <FeatherIcon name="smartphone" size={22} color="#888" />,
+  },
 ];
 
 export default function FreelancerProfileScreen() {
@@ -150,7 +190,7 @@ export default function FreelancerProfileScreen() {
     lastName.trim().length > 0 &&
     selectedCity !== null &&
     selectedSkills.length > 0 &&
-    bio.trim().length > 0;
+    bio.trim().length >= 30; // minimum 30 characters
 
   const handleSubmit = async () => {
     if (!canSubmit || !user) return;
@@ -222,7 +262,12 @@ export default function FreelancerProfileScreen() {
             <Image source={{ uri: profilePhoto }} style={s.photo} />
           ) : (
             <View style={s.photoPlaceholder}>
-              <FeatherIcon name="camera" size={24} color={"#888"} style={s.photoIcon} />
+              <FeatherIcon
+                name="camera"
+                size={24}
+                color={"#888"}
+                style={s.photoIcon}
+              />
               <Text style={s.photoText}>Add photo</Text>
             </View>
           )}
@@ -297,7 +342,12 @@ export default function FreelancerProfileScreen() {
                   {city.name}
                 </Text>
                 {selectedCity?.id === city.id && (
-                  <FeatherIcon name="check" size={14} color="green" style={s.checkmark} />
+                  <FeatherIcon
+                    name="check"
+                    size={14}
+                    color="green"
+                    style={s.checkmark}
+                  />
                 )}
               </TouchableOpacity>
             ))}
@@ -320,7 +370,7 @@ export default function FreelancerProfileScreen() {
               onPress={() => toggleSkill(skill.id)}
               activeOpacity={0.8}
             >
-              <View style={s.skillIcon}>{skill.icon}</View>
+             <Text style={s.skillIcon}>{skill.icon}</Text>  
               <Text
                 style={[
                   s.skillLabel,
@@ -336,7 +386,12 @@ export default function FreelancerProfileScreen() {
             onPress={() => setShowCustomSkill(!showCustomSkill)}
             activeOpacity={0.8}
           >
-            <FeatherIcon name="plus" size={22} color="#888" style={s.skillIcon} />
+            <FeatherIcon
+              name="plus"
+              size={22}
+              color="#888"
+              style={s.skillIcon}
+            />
             <Text style={s.skillLabel}>Add more</Text>
           </TouchableOpacity>
         </View>
@@ -350,11 +405,7 @@ export default function FreelancerProfileScreen() {
                 autoCapitalize="words"
               />
             </View>
-            <Button
-              label="Add"
-              onPress={addCustomSkill}
-              style={s.addBtn}
-            />
+            <Button label="Add" onPress={addCustomSkill} style={s.addBtn} />
           </View>
         )}
 
@@ -373,7 +424,16 @@ export default function FreelancerProfileScreen() {
           maxLength={300}
           textAlignVertical="top"
         />
-        <Text style={s.charCount}>{bio.length}/300</Text>
+        <Text
+          style={[
+            s.charCount,
+            { color: bio.length < 30 ? Colors.danger : Colors.grey400 },
+          ]}
+        >
+          {bio.length < 30
+            ? `${30 - bio.length} more characters needed`
+            : `${bio.length}/300`}
+        </Text>
 
         {/* WhatsApp */}
         <Input
@@ -422,7 +482,11 @@ export default function FreelancerProfileScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  scroll: { paddingHorizontal: Layout.screenPadding, paddingTop: 56, paddingBottom: 100 },
+  scroll: {
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: 56,
+    paddingBottom: 100,
+  },
   title: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.xxl,
@@ -457,10 +521,10 @@ const s = StyleSheet.create({
     color: Colors.grey300,
     marginTop: Spacing.xs,
   },
+  // In StyleSheet — remove the bio reference
   charCount: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.grey300,
+    fontSize: FontSize.xs,
+    color: Colors.grey400, // static default color
     textAlign: "right",
     marginTop: Spacing.xs,
   },
@@ -547,7 +611,10 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.black,
   },
-  dropdownItemTextSelected: { fontFamily: FontFamily.medium, color: Colors.black },
+  dropdownItemTextSelected: {
+    fontFamily: FontFamily.medium,
+    color: Colors.black,
+  },
   checkmark: {
     fontSize: 12,
     color: Colors.green,
