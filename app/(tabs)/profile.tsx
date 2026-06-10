@@ -11,6 +11,7 @@ import {
   Image,
   Alert,
   Dimensions,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useCallback } from "react";
@@ -29,6 +30,7 @@ import Card from "../../components/ui/Card";
 import Divider from "../../components/ui/Divider";
 import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import { VIBES } from "../../constants/Vibes";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
@@ -104,12 +106,22 @@ export default function ProfileScreen() {
   const [photoChanged, setPhotoChanged] = useState(false);
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
 
+  // Reviews
+  const [myReviews, setMyReviews] = useState<any[]>([]);
+  const [showMyReviewsSheet, setShowMyReviewsSheet] = useState(false);
+
   // ── Fetch ────────────────────────────────────────────────────────────────
 
   useFocusEffect(
     useCallback(() => {
       if (user?.id) fetchProfileData();
     }, [user?.id]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) fetchMyReviews();
+    }, [user]),
   );
 
   const fetchProfileData = async () => {
@@ -178,6 +190,30 @@ export default function ProfileScreen() {
     }
 
     setLoading(false);
+  };
+
+  const fetchMyReviews = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('reviews')
+      .select(`
+        id,
+        vibes,
+        note,
+        created_at,
+        client_id,
+        users!reviews_client_id_fkey (
+          name,
+          city_id,
+          cities (
+            name
+          )
+        )
+      `)
+      .eq('freelancer_id', user.id)
+      .order('created_at', { ascending: false });
+    console.log('My reviews:', data?.length, error?.message);
+    if (data) setMyReviews(data as any);
   };
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -346,6 +382,19 @@ export default function ProfileScreen() {
     setShowMenu(false);
     await signOut();
     router.replace("/(auth)/");
+  };
+
+  const getProfileCompletion = () => {
+    const checks = [
+      { label: "Profile photo", done: !!avatarUrl },
+      { label: "Bio", done: bio.trim().length >= 30 },
+      { label: "Skills", done: selectedSkills.length > 0 },
+      { label: "Portfolio", done: portfolioUrls.length > 0 },
+      { label: "City", done: !!cityId },
+    ];
+    const completed = checks.filter((c) => c.done).length;
+    const percentage = Math.round((completed / checks.length) * 100);
+    return { checks, completed, total: checks.length, percentage };
   };
 
   // ── Loading / client guard ────────────────────────────────────────────────
@@ -713,6 +762,114 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {/* Reviews section */}
+      {myReviews.length > 0 ? (
+        <View style={s.section}>
+          <View style={s.reviewsHeaderRow}>
+            <Text style={[TextStyles.label, s.sectionLabel]}>Reviews & Vibes</Text>
+            <View style={s.reviewCountBadge}>
+              <Text style={s.reviewCountText}>{myReviews.length}</Text>
+            </View>
+          </View>
+
+          {/* Vibe summary */}
+          <View style={s.vibeSummaryRow}>
+            {(() => {
+              const counts: Record<string, number> = {};
+              myReviews.forEach((r) => {
+                (r.vibes ?? []).forEach((v: string) => {
+                  counts[v] = (counts[v] ?? 0) + 1;
+                });
+              });
+              return Object.entries(counts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([vibeId, count]) => {
+                  const vibe = VIBES.find((v) => v.id === vibeId);
+                  if (!vibe) return null;
+                  return (
+                    <View key={vibeId} style={s.vibePill}>
+                      <Text style={s.vibePillEmoji}>{vibe.emoji}</Text>
+                      <Text style={s.vibePillLabel}>{vibe.label}</Text>
+                      <Text style={s.vibePillCount}>×{count}</Text>
+                    </View>
+                  );
+                });
+            })()}
+          </View>
+
+          <TouchableOpacity
+            style={s.seeAllBtn}
+            onPress={() => setShowMyReviewsSheet(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={s.seeAllBtnText}>
+              See all reviews ({myReviews.length})
+            </Text>
+            <Feather name="chevron-right" size={16} color={Colors.black} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={s.section}>
+          <Text style={[TextStyles.label, s.sectionLabel]}>Reviews</Text>
+          <View style={s.noReviewsWrap}>
+            <Text style={s.noReviewsText}>
+              No reviews yet. Complete jobs to get reviews from clients.
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {(() => {
+        const completion = getProfileCompletion();
+        if (completion.percentage === 100) return null;
+        return (
+          <View style={s.completionWrap}>
+            <View style={s.completionHeader}>
+              <Text style={s.completionTitle}>
+                Profile {completion.percentage}% complete
+              </Text>
+              <Text style={s.completionSub}>
+                Complete your profile to get more clients
+              </Text>
+            </View>
+
+            {/* Progress bar */}
+            <View style={s.progressBar}>
+              <View
+                style={[
+                  s.progressFill,
+                  { width: `${completion.percentage}%` as any },
+                ]}
+              />
+            </View>
+
+            {/* Missing items */}
+            <View style={s.completionItems}>
+              {completion.checks
+                .filter((c) => !c.done)
+                .map((check, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={s.completionItem}
+                    onPress={() => setIsEditing(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.completionItemIcon}>○</Text>
+                    <Text style={s.completionItemText}>
+                      Add {check.label.toLowerCase()}
+                    </Text>
+                    <Feather
+                      name="chevron-right"
+                      size={14}
+                      color={Colors.grey400}
+                    />
+                  </TouchableOpacity>
+                ))}
+            </View>
+          </View>
+        );
+      })()}
+
       <Divider />
 
       {/* Portfolio */}
@@ -742,6 +899,7 @@ export default function ProfileScreen() {
   );
 
   return (
+    <>
     <SafeAreaView
       style={[s.container, { position: "relative", zIndex: 100 }]}
       edges={["top"]}
@@ -868,6 +1026,83 @@ export default function ProfileScreen() {
         </>
       )}
     </SafeAreaView>
+
+    <Modal
+      visible={showMyReviewsSheet}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowMyReviewsSheet(false)}
+    >
+      <View style={s.reviewSheetContainer}>
+        <TouchableOpacity
+          style={s.reviewSheetOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMyReviewsSheet(false)}
+        />
+        <View style={s.reviewSheet}>
+          <View style={s.reviewSheetHandle} />
+          <View style={s.reviewSheetHeader}>
+            <Text style={s.reviewSheetTitle}>Your reviews</Text>
+            <TouchableOpacity
+              onPress={() => setShowMyReviewsSheet(false)}
+              activeOpacity={0.7}
+            >
+              <Feather name="x" size={20} color={Colors.black} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.reviewSheetContent}
+          >
+            {myReviews.map((review, index) => (
+              <View key={review.id}>
+                <View style={s.reviewItem}>
+                  <View style={s.reviewClientRow}>
+                    <Avatar
+                      name={(review as any).users?.name}
+                      size="sm"
+                    />
+                    <View style={s.reviewClientInfo}>
+                      <Text style={s.reviewClientName}>
+                        {(review as any).users?.name ?? 'Client'}
+                      </Text>
+                      <Text style={s.reviewClientMeta}>
+                        {(review as any).users?.cities?.name ?? ''}
+                        {(review as any).users?.cities?.name ? ' · ' : ''}
+                        {new Date(review.created_at).toLocaleDateString(
+                          'en-IN',
+                          { day: 'numeric', month: 'short', year: 'numeric' },
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={s.reviewVibesRow}>
+                    {(review.vibes ?? []).map((vibeId: string) => {
+                      const vibe = VIBES.find((v) => v.id === vibeId);
+                      if (!vibe) return null;
+                      return (
+                        <View key={vibeId} style={s.reviewVibePill}>
+                          <Text style={s.reviewVibePillText}>
+                            {vibe.emoji} {vibe.label}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                  {review.note ? (
+                    <Text style={s.reviewNoteText}>"{review.note}"</Text>
+                  ) : null}
+                </View>
+                {index < myReviews.length - 1 && (
+                  <View style={s.reviewDivider} />
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -899,7 +1134,7 @@ const s = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xl,
-    paddingBottom: 100,
+    paddingBottom: Spacing.lg,
   },
 
   // View mode — profile top
@@ -923,7 +1158,7 @@ const s = StyleSheet.create({
 
   // Sections
   section: { paddingTop: Spacing.xl, paddingBottom: Spacing.xs },
-  sectionLabel: { marginBottom: Spacing.md },
+  sectionLabel: { marginBottom: Spacing.sm },
   bioText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
@@ -1249,5 +1484,225 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: FontSize.md,
     color: Colors.green,
+  },
+  completionWrap: {
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.xl,
+    padding: Spacing.lg,
+    backgroundColor: Colors.greenLight,
+    borderRadius: Radius.lg,
+    borderWidth: 0.5,
+    borderColor: Colors.green,
+  },
+  completionHeader: {
+    marginBottom: Spacing.md,
+  },
+  completionTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.greenDark,
+    marginBottom: Spacing.xs,
+  },
+  completionSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.green,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: Colors.white,
+    borderRadius: Radius.full,
+    marginBottom: Spacing.md,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: 4,
+    backgroundColor: Colors.green,
+    borderRadius: Radius.full,
+  },
+  completionItems: {
+    gap: Spacing.xs,
+  },
+  completionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+  },
+  completionItemIcon: {
+    fontSize: 12,
+    color: Colors.green,
+  },
+  completionItemText: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.greenDark,
+  },
+
+  // Reviews
+  reviewsHeaderRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  reviewCountBadge: {
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    marginTop:-8,
+  },
+  reviewCountText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    color: Colors.grey500,
+  },
+  vibeSummaryRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  vibePill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: Spacing.xs,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs + 1,
+  },
+  vibePillEmoji: { fontSize: 14 },
+  vibePillLabel: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey700,
+  },
+  vibePillCount: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    color: Colors.grey500,
+  },
+  seeAllBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: Spacing.sm,
+    borderWidth: 0.5,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.white,
+  },
+  seeAllBtnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  noReviewsWrap: {
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    alignItems: 'center' as const,
+  },
+  noReviewsText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+    textAlign: 'center' as const,
+    lineHeight: FontSize.sm * 1.6,
+  },
+  reviewSheetContainer: {
+    flex: 1,
+    justifyContent: 'flex-end' as const,
+  },
+  reviewSheetOverlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+  },
+  reviewSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    maxHeight: '80%' as any,
+    paddingTop: Spacing.md,
+  },
+  reviewSheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: Colors.grey200,
+    borderRadius: Radius.full,
+    alignSelf: 'center' as const,
+    marginBottom: Spacing.md,
+  },
+  reviewSheetHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border,
+  },
+  reviewSheetTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+  },
+  reviewSheetContent: {
+    padding: Spacing.xl,
+    paddingBottom: 40,
+  },
+  reviewItem: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  reviewClientRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: Spacing.sm,
+  },
+  reviewClientInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  reviewClientName: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  reviewClientMeta: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey400,
+  },
+  reviewVibesRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: Spacing.xs,
+  },
+  reviewVibePill: {
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+  },
+  reviewVibePillText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey700,
+  },
+  reviewNoteText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    lineHeight: FontSize.base * 1.6,
+    fontStyle: 'italic' as const,
+  },
+  reviewDivider: {
+    height: 0.5,
+    backgroundColor: Colors.border,
   },
 });

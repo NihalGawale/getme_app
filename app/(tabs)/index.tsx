@@ -25,22 +25,26 @@ import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { Feather } from "@expo/vector-icons";
 
-type City = { id: string; name: string };
+type City = { id: string; name: string; state: string };
 type Skill = { id: string; name: string; icon: string };
-type FreelancerRow = {
+type Freelancer = {
   id: string;
   user_id: string;
   bio: string | null;
   skills: string[];
-  skill_names: string[];
   portfolio_urls: string[];
   is_published: boolean;
+  whatsapp_number: string | null;
+  instagram_handle: string | null;
   users: {
     name: string;
     avatar_url: string | null;
     city_id: string;
     cities: { name: string };
   };
+  skill_names: string[];
+  review_count: number;
+  vibe_count: number;
 };
 
 const CARD_IMAGE_WIDTH = Layout.screenWidth - Layout.screenPadding * 2;
@@ -49,13 +53,14 @@ export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useAuth();
 
-  const [freelancers, setFreelancers] = useState<FreelancerRow[]>([]);
+  const [freelancers, setFreelancers] = useState<Freelancer[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [showCitySheet, setShowCitySheet] = useState(false);
+  const [showCityModal, setShowCityModal] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeIndex, setActiveIndex] = useState<Record<string, number>>({});
@@ -74,7 +79,7 @@ export default function HomeScreen() {
     const [{ data: citiesData }, { data: skillsData }] = await Promise.all([
       supabase
         .from("cities")
-        .select("id, name")
+        .select("id, name, state")
         .eq("is_active", true)
         .order("name"),
       supabase.from("skills").select("id, name, icon").eq("is_active", true),
@@ -93,7 +98,6 @@ export default function HomeScreen() {
 
     setLoading(false);
   };
-
   const fetchFreelancers = async () => {
     if (!selectedCity) return;
 
@@ -114,9 +118,7 @@ export default function HomeScreen() {
           name,
           avatar_url,
           city_id,
-          cities (
-            name
-          )
+          cities (name)
         )
       `,
         )
@@ -136,7 +138,7 @@ export default function HomeScreen() {
         return;
       }
 
-      const enriched = (data ?? []).map((f) => ({
+      const enriched = ((data as any[]) ?? []).map((f) => ({
         id: f.id as string,
         user_id: f.user_id as string,
         bio: f.bio as string | null,
@@ -149,16 +151,78 @@ export default function HomeScreen() {
           name: (f.users as any)?.name as string,
           avatar_url: (f.users as any)?.avatar_url as string | null,
           city_id: (f.users as any)?.city_id as string,
-          cities: {
-            name: (f.users as any)?.cities?.name as string,
-          },
+          cities: { name: (f.users as any)?.cities?.name as string },
         },
         skill_names: ((f.skills as string[]) ?? [])
           .map((sid: string) => skills.find((s) => s.id === sid)?.name)
           .filter((name): name is string => Boolean(name)),
+        review_count: 0,
+        vibe_count: 0,
       }));
 
-      setFreelancers(enriched);
+      // Fetch review counts BEFORE setting state
+      // Single batch query for all freelancers
+      const freelancerIds = enriched.map((f) => f.user_id);
+      console.log("Fetching reviews for IDs:", JSON.stringify(freelancerIds));
+
+      const { data: reviewData, error: reviewError } = await supabase
+        .from("reviews")
+        .select("freelancer_id, vibes, note")
+        .in("freelancer_id", freelancerIds);
+
+      const reviewCounts: Record<string, number> = {};
+      const vibeCounts: Record<string, number> = {};
+
+      if (reviewData) {
+        reviewData.forEach((r: any) => {
+          // Count reviews that have a note
+          if (r.note) {
+            reviewCounts[r.freelancer_id] =
+              (reviewCounts[r.freelancer_id] ?? 0) + 1;
+          }
+          // Count total vibes
+          (r.vibes ?? []).forEach(() => {
+            vibeCounts[r.freelancer_id] =
+              (vibeCounts[r.freelancer_id] ?? 0) + 1;
+          });
+        });
+      }
+
+      console.log("Review counts:", JSON.stringify(reviewCounts));
+      console.log("Vibe counts:", JSON.stringify(vibeCounts));
+      console.log("Review error:", reviewError?.message);
+
+      // Build counts map
+      const counts: Record<string, number> = {};
+      if (reviewData) {
+        reviewData.forEach((r: any) => {
+          counts[r.freelancer_id] = (counts[r.freelancer_id] ?? 0) + 1;
+        });
+      }
+
+      console.log("Final counts:", JSON.stringify(counts));
+
+      // Merge counts into enriched BEFORE calling setFreelancers
+      const enrichedWithReviews = enriched.map((f) => ({
+        ...f,
+        review_count: counts[f.user_id] ?? 0,
+        vibe_count: vibeCounts[f.user_id] ?? 0,
+      }));
+
+      console.log(
+        "Enriched with reviews:",
+        JSON.stringify(
+          enrichedWithReviews.map((f) => ({
+            name: f.users?.name,
+            user_id: f.user_id,
+            review_count: f.review_count,
+            vibe_count: f.vibe_count,
+          })),
+        ),
+      );
+
+      // Single setFreelancers call — no race condition
+      setFreelancers(enrichedWithReviews);
     } catch (e) {
       console.log("Network error:", e);
       setFreelancers([]);
@@ -252,7 +316,10 @@ export default function HomeScreen() {
         </Text>
         <TouchableOpacity
           style={s.cityPill}
-          onPress={() => setShowCitySheet(true)}
+          onPress={() => {
+            setCitySearch("");
+            setShowCityModal(true);
+          }}
           activeOpacity={0.8}
         >
           <Text style={s.cityPillDot}>●</Text>
@@ -362,18 +429,39 @@ export default function HomeScreen() {
             >
               <View style={s.cardHeader}>
                 <Avatar
-                  name={item.users?.name}
                   uri={item.users?.avatar_url}
+                  name={item.users?.name}
                   size="md"
                 />
                 <View style={s.cardInfo}>
-                  <Text style={s.cardName}>
-                    {item.users?.name ?? "Unknown"}
-                  </Text>
+                  {/* Name row — name left, review count right */}
+                  <View style={s.cardNameRow}>
+                    <Text style={s.cardName} numberOfLines={1}>
+                      {item.users?.name}
+                    </Text>
+                    {item.review_count > 0 && (
+                      <Text style={s.reviewCount}>
+                        ★{" "}
+                        {item.review_count === 1
+                          ? "1 review"
+                          : `${item.review_count} reviews`}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Skill + city below */}
                   <Text style={s.cardMeta}>
                     {item.skill_names[0] ?? "Freelancer"} ·{" "}
                     {item.users?.cities?.name}
                   </Text>
+
+                  {/* Vibe count — shown separately below meta */}
+                  {item.vibe_count > 0 && (
+                    <Text style={s.vibeCount}>
+                      ⚡ {item.vibe_count}{" "}
+                      {item.vibe_count === 1 ? "vibe" : "vibes"}
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -479,46 +567,101 @@ export default function HomeScreen() {
         )}
       />
 
-      {/* City bottom sheet */}
+      {/* City searchable modal */}
       <Modal
-        visible={showCitySheet}
+        visible={showCityModal}
         transparent
-        animationType="slide"
-        onRequestClose={() => setShowCitySheet(false)}
+        animationType="fade"
+        onRequestClose={() => setShowCityModal(false)}
       >
-        <TouchableOpacity
-          style={s.overlay}
-          activeOpacity={1}
-          onPress={() => setShowCitySheet(false)}
-        />
-        <View style={s.sheet}>
-          <View style={s.sheetHandle} />
-          <Text style={s.sheetTitle}>Browse by city</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {cities.map((city) => (
+        <View style={s.cityModalContainer}>
+          <View style={s.cityModalCard}>
+            {/* Header */}
+            <View style={s.cityModalHeader}>
+              <Text style={s.cityModalTitle}>Select city</Text>
               <TouchableOpacity
-                key={city.id}
-                style={s.cityItem}
-                onPress={() => {
-                  setSelectedCity(city);
-                  setShowCitySheet(false);
-                }}
-                activeOpacity={0.8}
+                onPress={() => setShowCityModal(false)}
+                activeOpacity={0.7}
+                style={s.cityModalClose}
               >
-                <Text
-                  style={[
-                    s.cityName,
-                    selectedCity?.id === city.id && s.cityNameSelected,
-                  ]}
-                >
-                  {city.name}
-                </Text>
-                {selectedCity?.id === city.id && (
-                  <Feather name="check" size={14} color={Colors.green} />
-                )}
+                <Feather name="x" size={20} color={Colors.black} />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </View>
+
+            {/* Search input */}
+            <View style={s.citySearchWrap}>
+              <Feather
+                name="search"
+                size={16}
+                color={Colors.grey400}
+                style={s.citySearchIcon}
+              />
+              <TextInput
+                style={s.citySearchInput}
+                placeholder="Search city or state..."
+                placeholderTextColor={Colors.grey300}
+                value={citySearch}
+                onChangeText={setCitySearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={true}
+              />
+              {citySearch.length > 0 && (
+                <TouchableOpacity onPress={() => setCitySearch("")}>
+                  <Feather name="x-circle" size={16} color={Colors.grey400} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* City list */}
+            <FlatList
+              data={cities.filter(
+                (city) =>
+                  city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
+                  city.state.toLowerCase().includes(citySearch.toLowerCase()),
+              )}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={s.cityList}
+              ListEmptyComponent={
+                <View style={s.cityEmptyWrap}>
+                  <Text style={s.cityEmptyText}>
+                    No cities found for "{citySearch}"
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    s.cityItem,
+                    selectedCity?.id === item.id && s.cityItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedCity(item);
+                    setShowCityModal(false);
+                    setCitySearch("");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={s.cityItemLeft}>
+                    <Text
+                      style={[
+                        s.cityItemName,
+                        selectedCity?.id === item.id && s.cityItemNameSelected,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text style={s.cityItemState}>{item.state}</Text>
+                  </View>
+                  {selectedCity?.id === item.id && (
+                    <Feather name="check" size={16} color={Colors.green} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -587,32 +730,45 @@ const s = StyleSheet.create({
   searchClear: { padding: 2 }, // unused — Feather icon used
 
   // Skills
-  skillsScroll: { maxHeight: 44 },
+  skillsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   skillsRow: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xs,
     gap: Spacing.sm,
-    paddingBottom: Spacing.xs,
+    alignItems: "center",
+    flexDirection: "row",
   },
   skillChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
     borderWidth: 0.5,
     borderColor: Colors.border,
     backgroundColor: Colors.white,
+    height: 34,
   },
-  skillChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
-  skillChipIcon: { fontSize: 12 },
+  skillChipActive: {
+    backgroundColor: Colors.black,
+    borderColor: Colors.black,
+  },
+  skillChipIcon: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
   skillChipText: {
     fontFamily: FontFamily.medium,
-    fontSize: 12,
+    fontSize: FontSize.sm,
     color: Colors.grey500,
+    lineHeight: 18,
   },
   skillChipTextActive: { color: Colors.white },
-
+  
   // Results header
   resultsHeader: {
     flexDirection: "row",
@@ -633,7 +789,7 @@ const s = StyleSheet.create({
   },
 
   // List
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: 10 },
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg, gap: 10 },
 
   // Card
   card: {
@@ -652,16 +808,29 @@ const s = StyleSheet.create({
     paddingBottom: Spacing.sm,
   },
   cardInfo: { flex: 1 },
+  cardNameRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    gap: Spacing.sm,
+  },
   cardName: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.base,
     color: Colors.black,
     marginBottom: 2,
+    flex: 1,
   },
   cardMeta: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
     color: Colors.grey500,
+  },
+  reviewCount: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.green,
+    flexShrink: 0,
   },
 
   // Tags
@@ -716,6 +885,12 @@ const s = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.grey500,
   },
+  vibeCount: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.green,
+    marginTop: 2,
+  },
 
   // Dot indicators
   dotsRow: {
@@ -747,44 +922,103 @@ const s = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // City sheet
-  overlay: { flex: 1, backgroundColor: Colors.overlay },
-  sheet: {
+  // City modal
+  cityModalContainer: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    padding: Spacing.xl,
+  },
+  cityModalCard: {
     backgroundColor: Colors.white,
-    borderTopLeftRadius: Spacing.xl,
-    borderTopRightRadius: Spacing.xl,
-    padding: Spacing.lg,
-    maxHeight: "60%",
+    borderRadius: Radius.xl,
+    width: "100%" as any,
+    maxHeight: "80%" as any,
+    overflow: "hidden" as const,
   },
-  sheetHandle: {
-    width: Spacing.xxxl,
-    height: 3,
-    backgroundColor: Colors.grey200,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: Spacing.md,
+  cityModalHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border,
   },
-  sheetTitle: {
+  cityModalTitle: {
     fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+  },
+  cityModalClose: {
+    width: 32,
+    height: 32,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  citySearchWrap: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: Spacing.sm,
+    margin: Spacing.lg,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+  },
+  citySearchIcon: {
+    flexShrink: 0,
+  },
+  citySearchInput: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
     color: Colors.black,
-    marginBottom: Spacing.md,
+    height: 44,
+  },
+  cityList: {
+    maxHeight: 400,
   },
   cityItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderBottomWidth: 0.5,
     borderBottomColor: Colors.grey100,
   },
-  cityName: {
+  cityItemSelected: {
+    backgroundColor: Colors.greenLight,
+  },
+  cityItemLeft: {
+    gap: 2,
+  },
+  cityItemName: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
     color: Colors.black,
   },
-  cityNameSelected: { fontFamily: FontFamily.medium },
-  // cityCheck removed — Feather icon used inline
+  cityItemNameSelected: {
+    fontFamily: FontFamily.medium,
+    color: Colors.greenDark,
+  },
+  cityItemState: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey400,
+  },
+  cityEmptyWrap: {
+    padding: Spacing.xxxl,
+    alignItems: "center" as const,
+  },
+  cityEmptyText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey400,
+    textAlign: "center" as const,
+  },
 });
 
 const sk = StyleSheet.create({

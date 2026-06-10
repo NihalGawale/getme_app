@@ -10,6 +10,7 @@ import {
   Modal,
   Alert,
   Dimensions,
+  ScrollView,
 } from "react-native";
 import ConfettiCannon from "react-native-confetti-cannon";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,6 +24,7 @@ import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import Avatar from "../../components/ui/Avatar";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import ReviewModal from "../../components/ReviewModal";
 
 type Skill = { id: string; name: string; icon: string };
 type Message = {
@@ -45,6 +47,7 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
 
   // Other user
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null);
@@ -75,6 +78,7 @@ export default function ChatScreen() {
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [pendingSkillIds, setPendingSkillIds] = useState<string[]>([]);
   const confettiRef = useRef<any>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   // Refresh job status every time screen comes into focus
   useFocusEffect(
@@ -105,10 +109,37 @@ export default function ChatScreen() {
   }, [id, user?.id]);
 
   const initChat = async () => {
+    const checkExistingReview = async () => {
+      if (!user?.id || !id) return;
+
+      // Find completed job for this conversation
+      const { data: job } = await supabase
+        .from("jobs")
+        .select("id")
+        .eq("conversation_id", id)
+        .eq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!job) return;
+
+      // Check if review exists for this job
+      const { data: review } = await supabase
+        .from("reviews")
+        .select("id")
+        .eq("job_id", job.id)
+        .eq("client_id", user.id)
+        .single();
+
+      setHasReviewed(!!review);
+    };
+
     try {
       await fetchMessages();
       await fetchOtherUser();
       await checkJobConfirmed();
+      await checkExistingReview();
       markMessagesRead();
     } finally {
       setLoading(false);
@@ -232,15 +263,6 @@ export default function ChatScreen() {
     setShowConfirmModal(true);
   };
 
-  const handleSkillSelectorConfirm = () => {
-    // Store selected skills in ref AND state
-    pendingSkillIdsRef.current = selectedSkills;
-    setPendingSkillIds(selectedSkills);
-    setShowHireModal(false);
-    setConfirmModalType("hire");
-    setShowConfirmModal(true);
-  };
-
   const confirmJob = async () => {
     setShowConfirmModal(false);
 
@@ -333,7 +355,15 @@ export default function ChatScreen() {
     await supabase.from("messages").insert({
       conversation_id: id,
       sender_id: user.id,
-      content: "✅ Job marked as complete by the freelancer.",
+      content: "\u2705 Job marked as complete by the freelancer.",
+      is_read: false,
+    });
+
+    // Prompt client to leave a review
+    await supabase.from("messages").insert({
+      conversation_id: id,
+      sender_id: user.id,
+      content: "\u2B50 Job complete! How was working together? Leave a review.",
       is_read: false,
     });
 
@@ -355,6 +385,39 @@ export default function ChatScreen() {
       "Job Complete! 🎉",
       "The client has been notified. They can hire you again anytime.",
     );
+  };
+
+  // ── Review ───────────────────────────────────────────
+
+  const handleSubmitReview = async (vibes: string[], note: string) => {
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id")
+      .eq("conversation_id", id)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!job) throw new Error("No completed job found");
+
+    const { error } = await supabase.from("reviews").insert({
+      job_id: job.id,
+      freelancer_id: freelancerUserIdRef.current,
+      client_id: user!.id,
+      vibes,
+      note: note || null,
+    });
+
+    if (error) throw error;
+    setHasReviewed(true);
+
+    await supabase.from("messages").insert({
+      conversation_id: id,
+      sender_id: user!.id,
+      content: "\u270D\uFE0F Review submitted. Thank you!",
+      is_read: false,
+    });
   };
 
   // ── Messages ──────────────────────────────────────────
@@ -562,6 +625,26 @@ export default function ChatScreen() {
                   {formatTime(item.created_at)}
                 </Text>
               </View>
+              {item.content.startsWith("\u2B50") && isClient && (
+                <TouchableOpacity
+                  style={[
+                    s.reviewPromptBtn,
+                    hasReviewed && s.reviewPromptBtnDisabled,
+                  ]}
+                  onPress={() => setShowReviewModal(true)}
+                  activeOpacity={hasReviewed ? 1 : 0.85}
+                  disabled={hasReviewed}
+                >
+                  <Text
+                    style={[
+                      s.reviewPromptText,
+                      hasReviewed && s.reviewPromptTextDisabled,
+                    ]}
+                  >
+                    Leave a review
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           );
         }}
@@ -609,50 +692,64 @@ export default function ChatScreen() {
         />
         <View style={s.hireSheet}>
           <View style={s.sheetHandle} />
-          <Text style={s.sheetTitle}>
-            What are you hiring {freelancerName} for?
-          </Text>
-          <Text style={s.sheetSub}>Select all that apply</Text>
-          <View style={s.skillGrid}>
-            {freelancerSkills.map((skill) => (
-              <TouchableOpacity
-                key={skill.id}
-                style={[
-                  s.skillTile,
-                  selectedSkills.includes(skill.id) && s.skillTileSelected,
-                ]}
-                onPress={() =>
-                  setSelectedSkills((prev) =>
-                    prev.includes(skill.id)
-                      ? prev.filter((s) => s !== skill.id)
-                      : [...prev, skill.id],
-                  )
-                }
-                activeOpacity={0.8}
-              >
-                <Text style={s.skillIcon}>{skill.icon}</Text>
-                <Text
-                  style={[
-                    s.skillName,
-                    selectedSkills.includes(skill.id) && s.skillNameSelected,
-                  ]}
-                >
-                  {skill.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity
-            style={[
-              s.confirmActionBtn,
-              selectedSkills.length === 0 && s.confirmBtnDisabled,
-            ]}
-            onPress={handleSkillSelectorConfirm}
-            activeOpacity={0.85}
-            disabled={selectedSkills.length === 0}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: Spacing.xxxl }}
           >
-            <Text style={s.confirmActionText}>Next</Text>
-          </TouchableOpacity>
+            <Text style={s.sheetTitle}>
+              What are you hiring {freelancerName} for?
+            </Text>
+            <Text style={s.sheetSub}>Select all that apply</Text>
+            <View style={s.skillGrid}>
+              {freelancerSkills.map((skill) => (
+                <TouchableOpacity
+                  key={skill.id}
+                  style={[
+                    s.skillTile,
+                    selectedSkills.includes(skill.id) && s.skillTileSelected,
+                  ]}
+                  onPress={() =>
+                    setSelectedSkills((prev) =>
+                      prev.includes(skill.id)
+                        ? prev.filter((s) => s !== skill.id)
+                        : [...prev, skill.id],
+                    )
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.skillIcon}>{skill.icon}</Text>
+                  <Text
+                    style={[
+                      s.skillName,
+                      selectedSkills.includes(skill.id) && s.skillNameSelected,
+                    ]}
+                  >
+                    {skill.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={[
+                s.confirmActionBtn,
+                selectedSkills.length === 0 && s.confirmBtnDisabled,
+              ]}
+              onPress={() => {
+                if (selectedSkills.length === 0) return;
+                pendingSkillIdsRef.current = selectedSkills;
+                setPendingSkillIds(selectedSkills);
+                setShowHireModal(false);
+                setConfirmModalType("hire");
+                setShowConfirmModal(true);
+              }}
+              activeOpacity={0.85}
+              disabled={selectedSkills.length === 0}
+            >
+              <Text style={s.confirmActionText}>Next →</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -712,6 +809,15 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Review modal ── */}
+      <ReviewModal
+        visible={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        onSubmit={handleSubmitReview}
+        freelancerName={freelancerNameRef.current}
+        hasCompletedJob={true}
+      />
 
       {/* ── Congratulations modal ── */}
       <Modal
@@ -914,11 +1020,14 @@ const s = StyleSheet.create({
     paddingLeft: 3,
   },
   sendBtnDisabled: { opacity: 0.3 },
-
-  // Overlay
-  overlay: { flex: 1, backgroundColor: Colors.overlay },
-
-  // Skill selector sheet
+  hireModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+  },
   hireSheet: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: Radius.xl,
@@ -1088,5 +1197,30 @@ const s = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: FontSize.base,
     color: Colors.white,
+  },
+
+  // Review prompt
+  reviewPromptBtn: {
+    backgroundColor: Colors.greenLight,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    alignSelf: "center",
+    marginTop: Spacing.xs,
+    borderWidth: 0.5,
+    borderColor: Colors.green,
+  },
+  reviewPromptText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.greenDark,
+  },
+  reviewPromptBtnDisabled: {
+    backgroundColor: Colors.grey100,
+    borderColor: Colors.border,
+    opacity: 0.5,
+  },
+  reviewPromptTextDisabled: {
+    color: Colors.grey400,
   },
 });
