@@ -163,7 +163,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   headerTitle: {
@@ -217,7 +217,7 @@ const s = StyleSheet.create({
   // Skill pills
   skillPills: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   skillPill: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,

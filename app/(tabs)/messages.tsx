@@ -257,7 +257,7 @@ const s = StyleSheet.create({
     paddingHorizontal: Layout.screenPadding,
     paddingTop: Spacing.md,
     paddingBottom: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   title: {
@@ -310,7 +310,7 @@ const s = StyleSheet.create({
     gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.offWhite,
   },
   convoRowUnread: { backgroundColor: Colors.offWhite },

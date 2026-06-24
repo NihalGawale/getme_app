@@ -66,9 +66,9 @@ export default function PhoneScreen() {
           <View key={i} style={[s.bar, i < 2 && s.barActive]} />
         ))}
       </View>
-      <Text style={s.title}>What's your number?</Text>
+      <Text style={s.title}>Can we have your number?</Text>
       <Text style={s.sub}>
-        We'll send a one-time code to verify. No spam, ever.
+        We'll send a one-time code to verify.
       </Text>
       <View style={s.inputWrap}>
         <Input
@@ -80,15 +80,15 @@ export default function PhoneScreen() {
           maxLength={10}
         />
       </View>
-      <View style={s.note}>
+      {/* <View style={s.note}>
         <FeatherIcon name="lock" size={18} color={Colors.grey500} style={s.noteIcon} />
         <Text style={s.noteText}>
           Your number is never shown on your public profile.
         </Text>
-      </View>
+      </View> */}
       <View style={{ flex: 1 }} />
       <Button
-        label="Send OTP"
+        label="Send me OTP"
         onPress={handleSendOTP}
         loading={loading}
         disabled={phone.length < 10}

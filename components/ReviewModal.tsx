@@ -208,7 +208,7 @@ const rs = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -246,7 +246,7 @@ const rs = StyleSheet.create({
     textTransform: 'none',
   },
   noteInput: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     padding: Spacing.md,

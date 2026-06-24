@@ -8,11 +8,14 @@ import {
   ScrollView,
   Alert,
   Image,
+  Modal,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import * as ImagePicker from "expo-image-picker";
+import { Feather } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
@@ -23,7 +26,7 @@ import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import FeatherIcon from "../../components/ui/FeatherIcon";
 
-type City = { id: string; name: string };
+type City = { id: string; name: string; state: string };
 type Skill = { id: string; name: string; icon: string };
 
 const DEFAULT_SKILLS = [
@@ -92,12 +95,15 @@ export default function FreelancerProfileScreen() {
   const [customSkill, setCustomSkill] = useState("");
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
+  console.log(customSkill, "custom skill ------------");
+
   // Data state
   const [cities, setCities] = useState<City[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [showCityModal, setShowCityModal] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [showCustomSkill, setShowCustomSkill] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -110,7 +116,7 @@ export default function FreelancerProfileScreen() {
     const [{ data: citiesData }, { data: skillsData }] = await Promise.all([
       supabase
         .from("cities")
-        .select("id, name")
+        .select("id, name, state")
         .eq("is_active", true)
         .order("name"),
       supabase.from("skills").select("id, name, icon").eq("is_active", true),
@@ -118,6 +124,12 @@ export default function FreelancerProfileScreen() {
     if (citiesData) setCities(citiesData);
     if (skillsData) setSkills(skillsData);
   };
+
+  const filteredCities = useMemo(() => {
+    const query = citySearch.trim().toLowerCase();
+    if (!query) return cities;
+    return cities.filter((city) => city.name.toLowerCase().startsWith(query));
+  }, [cities, citySearch]);
 
   const toggleSkill = (skillId: string) => {
     setSelectedSkills((prev) =>
@@ -127,22 +139,27 @@ export default function FreelancerProfileScreen() {
     );
   };
 
-  const addCustomSkill = async () => {
-    if (!customSkill.trim()) return;
-    const { data, error } = await supabase
-      .from("skills")
-      .insert({ name: customSkill.trim(), icon: "⭐", is_active: true })
-      .select()
-      .single();
+const addCustomSkill = async () => {
+  if (!customSkill.trim()) return;
+  const { data, error } = await supabase
+    .from("skills")
+    .insert({ name: customSkill.trim(), icon: "⭐", is_active: true })
+    .select()
+    .single();
 
-    if (data) {
-      setSkills((prev) => [...prev, data]);
-      setSelectedSkills((prev) => [...prev, data.id]);
-      setCustomSkill("");
-      setShowCustomSkill(false);
-    }
-  };
+  console.log('Insert skill data:', data);
+  console.log('Insert skill error:', error?.message);
+  console.log('Insert skill error details:', JSON.stringify(error));
 
+  if (data) {
+    setSkills((prev) => [...prev, data]);
+    setSelectedSkills((prev) => [...prev, data.id]);
+    setCustomSkill("");
+    setShowCustomSkill(false);
+  } else {
+    console.log('No data returned, skill not added');
+  }
+};
   const pickProfilePhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -190,7 +207,7 @@ export default function FreelancerProfileScreen() {
     lastName.trim().length > 0 &&
     selectedCity !== null &&
     selectedSkills.length > 0 &&
-    bio.trim().length >= 30; // minimum 30 characters
+    bio.trim().length >= 30;
 
   const handleSubmit = async () => {
     if (!canSubmit || !user) return;
@@ -246,7 +263,7 @@ export default function FreelancerProfileScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={s.scroll}
       >
-        <Text style={s.title}>Set up your profile</Text>
+        <Text style={s.title}>Let's build your profile</Text>
         <Text style={s.sub}>
           This is how clients will find and contact you.
         </Text>
@@ -272,11 +289,13 @@ export default function FreelancerProfileScreen() {
             </View>
           )}
         </TouchableOpacity>
-        <Text style={s.optionalTag}>Optional</Text>
+        <Text style={s.optionalTag}>
+          Optional - Profiles with a photo get noticed more
+        </Text>
 
         {/* Name */}
         <Text style={s.label}>
-          Full name <Text style={s.required}>*</Text>
+          What should we call you? <Text style={s.required}>*</Text>
         </Text>
         <View style={s.nameRow}>
           <View style={{ flex: 1 }}>
@@ -299,11 +318,14 @@ export default function FreelancerProfileScreen() {
 
         {/* City */}
         <Text style={s.label}>
-          City <Text style={s.required}>*</Text>
+          Where are you located? <Text style={s.required}>*</Text>
         </Text>
         <TouchableOpacity
           style={s.dropdown}
-          onPress={() => setShowCityDropdown(!showCityDropdown)}
+          onPress={() => {
+            setCitySearch("");
+            setShowCityModal(true);
+          }}
           activeOpacity={0.8}
         >
           <Text
@@ -312,51 +334,16 @@ export default function FreelancerProfileScreen() {
             {selectedCity ? selectedCity.name : "Select your city"}
           </Text>
           <FeatherIcon
-            name={showCityDropdown ? "chevron-up" : "chevron-down"}
+            name="chevron-down"
             size={18}
             color={"#888"}
             style={s.dropdownArrow}
           />
         </TouchableOpacity>
-        {showCityDropdown && (
-          <View style={s.dropdownList}>
-            {cities.map((city) => (
-              <TouchableOpacity
-                key={city.id}
-                style={[
-                  s.dropdownItem,
-                  selectedCity?.id === city.id && s.dropdownItemSelected,
-                ]}
-                onPress={() => {
-                  setSelectedCity(city);
-                  setShowCityDropdown(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    s.dropdownItemText,
-                    selectedCity?.id === city.id && s.dropdownItemTextSelected,
-                  ]}
-                >
-                  {city.name}
-                </Text>
-                {selectedCity?.id === city.id && (
-                  <FeatherIcon
-                    name="check"
-                    size={14}
-                    color="green"
-                    style={s.checkmark}
-                  />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
         {/* Skills */}
         <Text style={s.label}>
-          Skills <Text style={s.required}>*</Text>
+          What's your craft? <Text style={s.required}>*</Text>
         </Text>
         <Text style={s.labelSub}>Select all that apply</Text>
         <View style={s.skillGrid}>
@@ -370,7 +357,7 @@ export default function FreelancerProfileScreen() {
               onPress={() => toggleSkill(skill.id)}
               activeOpacity={0.8}
             >
-             <Text style={s.skillIcon}>{skill.icon}</Text>  
+              <Text style={s.skillIcon}>{skill.icon}</Text>
               <Text
                 style={[
                   s.skillLabel,
@@ -476,6 +463,98 @@ export default function FreelancerProfileScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* City modal */}
+      <Modal
+        visible={showCityModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCityModal(false)}
+      >
+        <View style={s.cityModalContainer}>
+          <View style={s.cityModalCard}>
+            <View style={s.cityModalHeader}>
+              <Text style={s.cityModalTitle}>Select city</Text>
+              <TouchableOpacity
+                onPress={() => setShowCityModal(false)}
+                activeOpacity={0.7}
+                style={s.cityModalClose}
+              >
+                <Feather name="x" size={20} color={Colors.black} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.citySearchWrap}>
+              <Feather
+                name="search"
+                size={16}
+                color={Colors.grey400}
+                style={s.citySearchIcon}
+              />
+              <TextInput
+                style={s.citySearchInput}
+                placeholder="Search city..."
+                placeholderTextColor={Colors.grey300}
+                value={citySearch}
+                onChangeText={setCitySearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={true}
+              />
+              {citySearch.length > 0 && (
+                <TouchableOpacity onPress={() => setCitySearch("")}>
+                  <Feather name="x-circle" size={16} color={Colors.grey400} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FlatList
+              data={filteredCities}
+              extraData={citySearch}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={s.cityList}
+              ListEmptyComponent={
+                <View style={s.cityEmptyWrap}>
+                  <Text style={s.cityEmptyText}>
+                    No cities found for "{citySearch}"
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    s.cityItem,
+                    selectedCity?.id === item.id && s.cityItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedCity(item);
+                    setShowCityModal(false);
+                    setCitySearch("");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={s.cityItemLeft}>
+                    <Text
+                      style={[
+                        s.cityItemName,
+                        selectedCity?.id === item.id && s.cityItemNameSelected,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text style={s.cityItemState}>{item.state}</Text>
+                  </View>
+                  {selectedCity?.id === item.id && (
+                    <Feather name="check" size={16} color={Colors.green} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -521,10 +600,9 @@ const s = StyleSheet.create({
     color: Colors.grey300,
     marginTop: Spacing.xs,
   },
-  // In StyleSheet — remove the bio reference
   charCount: {
     fontSize: FontSize.xs,
-    color: Colors.grey400, // static default color
+    color: Colors.grey400,
     textAlign: "right",
     marginTop: Spacing.xs,
   },
@@ -537,7 +615,7 @@ const s = StyleSheet.create({
     height: 88,
     borderRadius: 44,
     backgroundColor: Colors.grey100,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
@@ -553,9 +631,9 @@ const s = StyleSheet.create({
   // Name row
   nameRow: { flexDirection: "row", gap: 10 },
 
-  // Text area (multiline — can't use Input component)
+  // Text area
   textArea: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -566,9 +644,9 @@ const s = StyleSheet.create({
     minHeight: 100,
   },
 
-  // Dropdown
+  // City dropdown trigger
   dropdown: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -588,44 +666,12 @@ const s = StyleSheet.create({
     color: Colors.grey300,
   },
   dropdownArrow: { fontSize: FontSize.sm, color: Colors.grey500 },
-  dropdownList: {
-    borderWidth: 0.5,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    marginTop: Spacing.xs,
-    overflow: "hidden",
-    backgroundColor: Colors.white,
-  },
-  dropdownItem: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.grey100,
-  },
-  dropdownItemSelected: { backgroundColor: Colors.grey100 },
-  dropdownItemText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    color: Colors.black,
-  },
-  dropdownItemTextSelected: {
-    fontFamily: FontFamily.medium,
-    color: Colors.black,
-  },
-  checkmark: {
-    fontSize: 12,
-    color: Colors.green,
-    fontFamily: FontFamily.medium,
-  },
 
   // Skills
   skillGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   skillTile: {
     width: "30%",
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     padding: Spacing.md,
@@ -659,5 +705,92 @@ const s = StyleSheet.create({
     color: Colors.grey300,
     textAlign: "center",
     marginTop: Spacing.md,
+  },
+
+  // City modal
+  cityModalContainer: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  cityModalCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    width: "100%",
+    maxHeight: "80%",
+    overflow: "hidden",
+  },
+  cityModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  cityModalTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+  },
+  cityModalClose: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  citySearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    margin: Spacing.lg,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+  },
+  citySearchIcon: { flexShrink: 0 },
+  citySearchInput: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    height: 44,
+  },
+  cityList: { maxHeight: 400 },
+  cityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.grey100,
+  },
+  cityItemSelected: { backgroundColor: Colors.greenLight },
+  cityItemLeft: { gap: 2 },
+  cityItemName: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  cityItemNameSelected: {
+    fontFamily: FontFamily.medium,
+    color: Colors.greenDark,
+  },
+  cityItemState: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey400,
+  },
+  cityEmptyWrap: { padding: Spacing.xxxl, alignItems: "center" },
+  cityEmptyText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey400,
+    textAlign: "center",
   },
 });

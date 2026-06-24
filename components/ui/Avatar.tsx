@@ -50,6 +50,6 @@ export default function Avatar({ name, uri, size = 'md' }: AvatarProps) {
 
 const s = StyleSheet.create({
   base: { overflow: 'hidden' },
-  fallback: { backgroundColor: Colors.grey100, borderWidth: 0.5, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
+  fallback: { backgroundColor: Colors.grey100, borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
   initials: { fontFamily: FontFamily.medium, color: Colors.grey700 },
 })

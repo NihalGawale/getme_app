@@ -10,9 +10,11 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Feather } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
@@ -20,7 +22,7 @@ import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 
-type City = { id: string; name: string };
+type City = { id: string; name: string; state: string };
 
 export default function ClientDetailsScreen() {
   const router = useRouter();
@@ -31,7 +33,8 @@ export default function ClientDetailsScreen() {
   const [email, setEmail] = useState("");
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
   const [cities, setCities] = useState<City[]>([]);
-  const [showCitySheet, setShowCitySheet] = useState(false);
+  const [showCityModal, setShowCityModal] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -41,11 +44,17 @@ export default function ClientDetailsScreen() {
   const fetchCities = async () => {
     const { data } = await supabase
       .from("cities")
-      .select("id, name")
+      .select("id, name, state")
       .eq("is_active", true)
       .order("name");
     if (data) setCities(data);
   };
+
+  const filteredCities = useMemo(() => {
+    const query = citySearch.trim().toLowerCase();
+    if (!query) return cities;
+    return cities.filter((city) => city.name.toLowerCase().startsWith(query));
+  }, [cities, citySearch]);
 
   const canSubmit =
     firstName.trim().length > 0 &&
@@ -95,7 +104,7 @@ export default function ClientDetailsScreen() {
 
         {/* Full name */}
         <Text style={s.label}>
-          Full name <Text style={s.required}>*</Text>
+          What should we call you? <Text style={s.required}>*</Text>
         </Text>
         <View style={s.nameRow}>
           <TextInput
@@ -120,11 +129,14 @@ export default function ClientDetailsScreen() {
 
         {/* City */}
         <Text style={s.label}>
-          City <Text style={s.required}>*</Text>
+          Where are you located? <Text style={s.required}>*</Text>
         </Text>
         <TouchableOpacity
           style={s.dropdown}
-          onPress={() => setShowCitySheet(true)}
+          onPress={() => {
+            setCitySearch("");
+            setShowCityModal(true);
+          }}
           activeOpacity={0.8}
         >
           <Text
@@ -150,11 +162,11 @@ export default function ClientDetailsScreen() {
         <Text style={s.optional}>Optional</Text>
 
         {/* Note */}
-        <View style={s.note}>
+        {/* <View style={s.note}>
           <Text style={s.noteText}>
             💬 Your name is shown to freelancers when you message them.
           </Text>
-        </View>
+        </View> */}
 
         {/* Submit */}
         <TouchableOpacity
@@ -171,46 +183,95 @@ export default function ClientDetailsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* City bottom sheet */}
+      {/* City modal */}
       <Modal
-        visible={showCitySheet}
+        visible={showCityModal}
         transparent
-        animationType="slide"
-        onRequestClose={() => setShowCitySheet(false)}
+        animationType="fade"
+        onRequestClose={() => setShowCityModal(false)}
       >
-        <TouchableOpacity
-          style={s.overlay}
-          activeOpacity={1}
-          onPress={() => setShowCitySheet(false)}
-        />
-        <View style={s.sheet}>
-          <View style={s.sheetHandle} />
-          <Text style={s.sheetTitle}>Select your city</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {cities.map((city) => (
+        <View style={s.cityModalContainer}>
+          <View style={s.cityModalCard}>
+            <View style={s.cityModalHeader}>
+              <Text style={s.cityModalTitle}>Select city</Text>
               <TouchableOpacity
-                key={city.id}
-                style={s.cityItem}
-                onPress={() => {
-                  setSelectedCity(city);
-                  setShowCitySheet(false);
-                }}
-                activeOpacity={0.8}
+                onPress={() => setShowCityModal(false)}
+                activeOpacity={0.7}
+                style={s.cityModalClose}
               >
-                <Text
-                  style={[
-                    s.cityName,
-                    selectedCity?.id === city.id && s.cityNameSelected,
-                  ]}
-                >
-                  {city.name}
-                </Text>
-                {selectedCity?.id === city.id && (
-                  <Text style={s.cityCheck}>✓</Text>
-                )}
+                <Feather name="x" size={20} color={Colors.black} />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </View>
+
+            <View style={s.citySearchWrap}>
+              <Feather
+                name="search"
+                size={16}
+                color={Colors.grey400}
+                style={s.citySearchIcon}
+              />
+              <TextInput
+                style={s.citySearchInput}
+                placeholder="Search city..."
+                placeholderTextColor={Colors.grey300}
+                value={citySearch}
+                onChangeText={setCitySearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={true}
+              />
+              {citySearch.length > 0 && (
+                <TouchableOpacity onPress={() => setCitySearch("")}>
+                  <Feather name="x-circle" size={16} color={Colors.grey400} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FlatList
+              data={filteredCities}
+              extraData={citySearch}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={s.cityList}
+              ListEmptyComponent={
+                <View style={s.cityEmptyWrap}>
+                  <Text style={s.cityEmptyText}>
+                    No cities found for "{citySearch}"
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    s.cityItem,
+                    selectedCity?.id === item.id && s.cityItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedCity(item);
+                    setShowCityModal(false);
+                    setCitySearch("");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={s.cityItemLeft}>
+                    <Text
+                      style={[
+                        s.cityItemName,
+                        selectedCity?.id === item.id && s.cityItemNameSelected,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text style={s.cityItemState}>{item.state}</Text>
+                  </View>
+                  {selectedCity?.id === item.id && (
+                    <Feather name="check" size={16} color={Colors.green} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </View>
       </Modal>
     </KeyboardAvoidingView>
@@ -255,7 +316,7 @@ const s = StyleSheet.create({
   },
   nameRow: { flexDirection: "row", gap: Spacing.sm },
   input: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -266,7 +327,7 @@ const s = StyleSheet.create({
     height: 48,
   },
   dropdown: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -315,48 +376,89 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.white,
   },
-  overlay: {
+  cityModalContainer: {
     flex: 1,
     backgroundColor: Colors.overlay,
-  },
-  sheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
+    justifyContent: "center",
+    alignItems: "center",
     padding: Spacing.xl,
-    maxHeight: "60%",
   },
-  sheetHandle: {
-    width: 32,
-    height: 3,
-    backgroundColor: Colors.grey200,
-    borderRadius: Radius.full,
-    alignSelf: "center",
-    marginBottom: Spacing.lg,
+  cityModalCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.xl,
+    width: "100%",
+    maxHeight: "80%",
+    overflow: "hidden",
   },
-  sheetTitle: {
+  cityModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  cityModalTitle: {
     fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+  },
+  cityModalClose: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  citySearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    margin: Spacing.lg,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+  },
+  citySearchIcon: { flexShrink: 0 },
+  citySearchInput: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
     color: Colors.black,
-    marginBottom: Spacing.md,
+    height: 44,
   },
+  cityList: { maxHeight: 400 },
   cityItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
-  cityName: {
+  cityItemSelected: { backgroundColor: Colors.greenLight },
+  cityItemLeft: { gap: 2 },
+  cityItemName: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
     color: Colors.black,
   },
-  cityNameSelected: { fontWeight: "500" },
-  cityCheck: {
+  cityItemNameSelected: {
+    fontFamily: FontFamily.medium,
+    color: Colors.greenDark,
+  },
+  cityItemState: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.xs,
+    color: Colors.grey400,
+  },
+  cityEmptyWrap: { padding: Spacing.xxxl, alignItems: "center" },
+  cityEmptyText: {
+    fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
-    color: Colors.green,
-    fontWeight: "500",
+    color: Colors.grey400,
+    textAlign: "center",
   },
 });

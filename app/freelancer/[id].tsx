@@ -217,6 +217,7 @@ export default function FreelancerProfilePage() {
         client_id,
         users!reviews_client_id_fkey (
           name,
+          avatar_url,
           city_id,
           cities (
             name
@@ -268,18 +269,16 @@ export default function FreelancerProfilePage() {
       .limit(1)
       .single();
     if (!job) throw new Error("No completed job found");
-    const { error } = await supabase
-      .from("reviews")
-      .upsert(
-        {
-          job_id: job.id,
-          freelancer_id: id,
-          client_id: user.id,
-          vibes,
-          note: note || null,
-        },
-        { onConflict: "job_id" },
-      );
+    const { error } = await supabase.from("reviews").upsert(
+      {
+        job_id: job.id,
+        freelancer_id: id,
+        client_id: user.id,
+        vibes,
+        note: note || null,
+      },
+      { onConflict: "job_id" },
+    );
     if (error) throw error;
     setExistingReview({ vibes, note: note || null });
     fetchReviews();
@@ -334,7 +333,7 @@ export default function FreelancerProfilePage() {
     setProfile({
       ...data,
       users: { ...users, cities: city },
-      skill_names: (skillsData || []).map((s) => s.name),
+      skill_names: (skillsData || []).map((s: any) => s.name),
     } as FreelancerProfile);
     setLoading(false);
   };
@@ -709,7 +708,11 @@ export default function FreelancerProfilePage() {
                     <View style={s.reviewItem}>
                       {/* Client info */}
                       <View style={s.reviewClientRow}>
-                        <Avatar name={(review as any).users?.name} size="sm" />
+                        <Avatar
+                          uri={(review as any).users?.avatar_url}
+                          name={(review as any).users?.name}
+                          size="sm"
+                        />
                         <View style={s.reviewClientInfo}>
                           <Text style={s.reviewClientName}>
                             {(review as any).users?.name ?? "Client"}
@@ -802,7 +805,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   backBtn: {
@@ -879,7 +882,7 @@ const s = StyleSheet.create({
   // Skills
   tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   tag: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
@@ -969,7 +972,7 @@ const s = StyleSheet.create({
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: Spacing.sm,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingVertical: Spacing.md,
@@ -1011,7 +1014,7 @@ const s = StyleSheet.create({
     alignItems: "center" as const,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
   reviewSheetTitle: {

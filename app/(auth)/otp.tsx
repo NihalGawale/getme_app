@@ -199,8 +199,8 @@ export default function OTPScreen() {
           ))}
         </View>
 
-        <Text style={s.title}>Enter the code</Text>
-        <Text style={s.sub}>Sent to {phone}.</Text>
+        <Text style={s.title}>Check your messages</Text>
+        <Text style={s.sub}>We sent a code to {phone}.</Text>
 
         {/* OTP container: visual boxes + real input overlay */}
         <View style={s.otpContainer}>
@@ -317,7 +317,7 @@ const s = StyleSheet.create({
   otpBox: {
     flex: 1,
     height: 56,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.grey200,
     borderRadius: Radius.md,
     alignItems: "center",

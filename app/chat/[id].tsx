@@ -80,6 +80,14 @@ export default function ChatScreen() {
   const confettiRef = useRef<any>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
+  // Options menu / report / block
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState("");
+  const [isBlocked, setIsBlocked] = useState(false);
+
   // Refresh job status every time screen comes into focus
   useFocusEffect(
     useCallback(() => {
@@ -107,6 +115,15 @@ export default function ChatScreen() {
       };
     }
   }, [id, user?.id]);
+
+  const REPORT_REASONS = [
+    "Inappropriate messages",
+    "Spam or scam",
+    "Fake profile",
+    "Harassment",
+    "Did not show up / unprofessional",
+    "Something else",
+  ];
 
   const initChat = async () => {
     const checkExistingReview = async () => {
@@ -138,6 +155,7 @@ export default function ChatScreen() {
     try {
       await fetchMessages();
       await fetchOtherUser();
+      await checkIfBlocked();
       await checkJobConfirmed();
       await checkExistingReview();
       markMessagesRead();
@@ -229,6 +247,23 @@ export default function ChatScreen() {
     setJobConfirmed(isActive);
     setActiveJobId(isActive ? data.id : null);
     activeJobIdRef.current = isActive ? data.id : null;
+  };
+
+  const checkIfBlocked = async () => {
+    if (!user?.id) return;
+    const otherId = isClientRef.current
+      ? freelancerUserIdRef.current
+      : clientIdRef.current;
+    if (!otherId) return;
+
+    const { data } = await supabase
+      .from("blocks")
+      .select("id")
+      .eq("blocker_id", user.id)
+      .eq("blocked_user_id", otherId)
+      .maybeSingle();
+
+    setIsBlocked(!!data);
   };
 
   // ── Hire flow ─────────────────────────────────────────
@@ -420,6 +455,80 @@ export default function ChatScreen() {
     });
   };
 
+  // ── Report / Block ────────────────────────────────────
+
+  const handleSubmitReport = async () => {
+    if (!selectedReportReason || !user?.id) return;
+    const otherId = isClientRef.current
+      ? freelancerUserIdRef.current
+      : clientIdRef.current;
+    if (!otherId) return;
+
+    const { error } = await supabase.from("reports").insert({
+      reporter_id: user.id,
+      reported_user_id: otherId,
+      conversation_id: id,
+      reason: selectedReportReason,
+      details: reportDetails.trim() || null,
+    });
+
+    if (error) {
+      Alert.alert("Error", "Could not submit report. Please try again.");
+      return;
+    }
+
+    setShowReportModal(false);
+    setSelectedReportReason(null);
+    setReportDetails("");
+    Alert.alert(
+      "Report submitted",
+      "Thank you. Our team will review this within 24 hours.",
+    );
+  };
+
+  const handleBlock = async () => {
+    if (!user?.id) return;
+    const otherId = isClientRef.current
+      ? freelancerUserIdRef.current
+      : clientIdRef.current;
+    if (!otherId) return;
+
+    const { error } = await supabase.from("blocks").insert({
+      blocker_id: user.id,
+      blocked_user_id: otherId,
+    });
+
+    if (error) {
+      Alert.alert("Error", "Could not block this user. Please try again.");
+      return;
+    }
+
+    setShowBlockConfirm(false);
+    setIsBlocked(true);
+    Alert.alert(
+      "User blocked",
+      "You will no longer see messages from this person.",
+      [{ text: "OK", onPress: () => router.back() }],
+    );
+  };
+
+  const handleUnblock = async () => {
+    if (!user?.id) return;
+    const otherId = isClientRef.current
+      ? freelancerUserIdRef.current
+      : clientIdRef.current;
+    if (!otherId) return;
+
+    await supabase
+      .from("blocks")
+      .delete()
+      .eq("blocker_id", user.id)
+      .eq("blocked_user_id", otherId);
+
+    setIsBlocked(false);
+    Alert.alert("Unblocked", "You can now message each other again.");
+  };
+
   // ── Messages ──────────────────────────────────────────
 
   const fetchMessages = async () => {
@@ -579,9 +688,16 @@ export default function ChatScreen() {
           >
             <Text style={s.completeBtnText}>Mark complete</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 100 }} />
-        )}
+        ) : null}
+
+        {/* 3-dots options menu */}
+        <TouchableOpacity
+          onPress={() => setShowOptionsMenu(true)}
+          style={s.optionsBtn}
+          activeOpacity={0.7}
+        >
+          <Feather name="more-vertical" size={20} color={Colors.black} />
+        </TouchableOpacity>
       </View>
 
       {/* ── Messages ── */}
@@ -819,6 +935,162 @@ export default function ChatScreen() {
         hasCompletedJob={true}
       />
 
+      {/* ── Options menu ── */}
+      <Modal
+        visible={showOptionsMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowOptionsMenu(false)}
+      >
+        <TouchableOpacity
+          style={s.optionsMenuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowOptionsMenu(false)}
+        >
+          <View style={s.optionsMenuCard}>
+            <TouchableOpacity
+              style={s.optionsMenuItem}
+              onPress={() => {
+                setShowOptionsMenu(false);
+                setShowReportModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="flag" size={16} color={Colors.black} />
+              <Text style={s.optionsMenuText}>Report</Text>
+            </TouchableOpacity>
+
+            <View style={s.optionsMenuDivider} />
+
+            <TouchableOpacity
+              style={s.optionsMenuItem}
+              onPress={() => {
+                setShowOptionsMenu(false);
+                if (isBlocked) {
+                  handleUnblock();
+                } else {
+                  setShowBlockConfirm(true);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather
+                name={isBlocked ? "user-check" : "slash"}
+                size={16}
+                color={Colors.danger}
+              />
+              <Text style={[s.optionsMenuText, { color: Colors.danger }]}>
+                {isBlocked ? "Unblock" : "Block"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Report modal ── */}
+      <Modal
+        visible={showReportModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <View style={s.reportModalContainer}>
+          <TouchableOpacity
+            style={s.reportModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowReportModal(false)}
+          />
+          <View style={s.reportSheet}>
+            <View style={s.reportSheetHandle} />
+            <Text style={s.reportSheetTitle}>Report this user</Text>
+            <Text style={s.reportSheetSub}>
+              Why are you reporting {otherUser?.name}?
+            </Text>
+
+            {REPORT_REASONS.map((reason) => (
+              <TouchableOpacity
+                key={reason}
+                style={[
+                  s.reportReasonItem,
+                  selectedReportReason === reason && s.reportReasonItemSelected,
+                ]}
+                onPress={() => setSelectedReportReason(reason)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    s.reportReasonText,
+                    selectedReportReason === reason && s.reportReasonTextSelected,
+                  ]}
+                >
+                  {reason}
+                </Text>
+                {selectedReportReason === reason && (
+                  <Feather name="check" size={16} color={Colors.black} />
+                )}
+              </TouchableOpacity>
+            ))}
+
+            <TextInput
+              style={s.reportDetailsInput}
+              placeholder="Additional details (optional)"
+              placeholderTextColor={Colors.grey300}
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              multiline
+              maxLength={300}
+            />
+
+            <TouchableOpacity
+              style={[
+                s.reportSubmitBtn,
+                !selectedReportReason && s.reportSubmitBtnDisabled,
+              ]}
+              onPress={handleSubmitReport}
+              activeOpacity={0.85}
+              disabled={!selectedReportReason}
+            >
+              <Text style={s.reportSubmitBtnText}>Submit report</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Block confirmation modal ── */}
+      <Modal
+        visible={showBlockConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBlockConfirm(false)}
+      >
+        <View style={s.confirmOverlay}>
+          <View style={s.confirmCard}>
+            <Text style={s.confirmEmoji}>🚫</Text>
+            <Text style={s.confirmTitle}>Block {otherUser?.name}?</Text>
+            <Text style={s.confirmSub}>
+              You will no longer see messages from them, and they won't be able
+              to contact you on GetMe.
+            </Text>
+            <View style={s.confirmBtns}>
+              <TouchableOpacity
+                style={s.confirmCancelBtn}
+                onPress={() => setShowBlockConfirm(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.confirmActionBtn, { backgroundColor: Colors.danger }]}
+                onPress={handleBlock}
+                activeOpacity={0.85}
+              >
+                <Text style={s.confirmActionText}>Block</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Congratulations modal ── */}
       <Modal
         visible={showCongrats}
@@ -868,7 +1140,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   backBtn: {
@@ -995,7 +1267,7 @@ const s = StyleSheet.create({
     gap: 10,
     paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
-    borderTopWidth: 0.5,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.grey100,
     backgroundColor: Colors.white,
   },
@@ -1065,7 +1337,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
@@ -1129,7 +1401,7 @@ const s = StyleSheet.create({
   confirmCancelBtn: {
     flex: 1,
     height: 48,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     alignItems: "center",
@@ -1207,7 +1479,7 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     alignSelf: "center",
     marginTop: Spacing.xs,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.green,
   },
   reviewPromptText: {
@@ -1222,5 +1494,137 @@ const s = StyleSheet.create({
   },
   reviewPromptTextDisabled: {
     color: Colors.grey400,
+  },
+
+  // Options menu
+  optionsBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionsMenuOverlay: {
+    flex: 1,
+    backgroundColor: "transparent",
+    alignItems: "flex-end",
+    paddingTop: 60,
+    paddingRight: Spacing.lg,
+  },
+  optionsMenuCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    minWidth: 160,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  optionsMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  optionsMenuText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.black,
+  },
+  optionsMenuDivider: {
+    height: 0.5,
+    backgroundColor: Colors.border,
+    marginHorizontal: Spacing.sm,
+  },
+
+  // Report modal
+  reportModalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+  },
+  reportSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    padding: Spacing.xl,
+    paddingBottom: Spacing.xxxl,
+  },
+  reportSheetHandle: {
+    width: 32,
+    height: 3,
+    backgroundColor: Colors.grey200,
+    borderRadius: Radius.full,
+    alignSelf: "center",
+    marginBottom: Spacing.lg,
+  },
+  reportSheetTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+    marginBottom: Spacing.xs,
+  },
+  reportSheetSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.sm,
+    color: Colors.grey500,
+    marginBottom: Spacing.lg,
+  },
+  reportReasonItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    marginBottom: Spacing.sm,
+  },
+  reportReasonItemSelected: {
+    borderColor: Colors.black,
+    borderWidth: 1.5,
+    backgroundColor: Colors.grey100,
+  },
+  reportReasonText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.grey500,
+  },
+  reportReasonTextSelected: {
+    fontFamily: FontFamily.medium,
+    color: Colors.black,
+  },
+  reportDetailsInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    minHeight: 80,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xl,
+    textAlignVertical: "top",
+  },
+  reportSubmitBtn: {
+    backgroundColor: Colors.black,
+    borderRadius: Radius.md,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportSubmitBtnDisabled: { opacity: 0.4 },
+  reportSubmitBtnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.base,
+    color: Colors.white,
   },
 });

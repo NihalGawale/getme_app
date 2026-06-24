@@ -19,7 +19,7 @@ export default function Card({ children, style, padding = Spacing.md }: CardProp
 const s = StyleSheet.create({
   card: {
     backgroundColor: Colors.white,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.lg,
   },

@@ -12,7 +12,7 @@ import {
   Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -24,6 +24,7 @@ import Avatar from "../../components/ui/Avatar";
 import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { Feather } from "@expo/vector-icons";
+import { posthog } from "../../lib/posthog";
 
 type City = { id: string; name: string; state: string };
 type Skill = { id: string; name: string; icon: string };
@@ -89,7 +90,7 @@ export default function HomeScreen() {
     if (skillsData) setSkills(skillsData);
 
     if (profile?.city_id && citiesData) {
-      const userCity = citiesData.find((c) => c.id === profile.city_id);
+      const userCity = citiesData.find((c: any) => c.id === profile.city_id);
       if (userCity) setSelectedCity(userCity);
       else setSelectedCity(citiesData[0]);
     } else if (citiesData?.length) {
@@ -98,6 +99,7 @@ export default function HomeScreen() {
 
     setLoading(false);
   };
+
   const fetchFreelancers = async () => {
     if (!selectedCity) return;
 
@@ -242,6 +244,12 @@ export default function HomeScreen() {
     const skillMatch = f.skill_names?.some((s) => s.toLowerCase().includes(q));
     return nameMatch || skillMatch;
   });
+
+  const filteredCities = useMemo(() => {
+    const query = citySearch.trim().toLowerCase();
+    if (!query) return cities;
+    return cities.filter((city) => city.name.toLowerCase().startsWith(query));
+  }, [cities, citySearch]);
 
   function SkeletonCard() {
     const opacity = useRef(new Animated.Value(0.4)).current;
@@ -615,11 +623,7 @@ export default function HomeScreen() {
 
             {/* City list */}
             <FlatList
-              data={cities.filter(
-                (city) =>
-                  city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
-                  city.state.toLowerCase().includes(citySearch.toLowerCase()),
-              )}
+              data={filteredCities}
               keyExtractor={(item) => item.id}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -695,7 +699,7 @@ const s = StyleSheet.create({
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 6,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
   },
   cityPillDot: { fontSize: 8, color: Colors.green },
@@ -717,7 +721,7 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 10,
     gap: Spacing.sm,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
   },
   searchIcon: { width: 16 }, // unused — Feather icon used
@@ -748,7 +752,7 @@ const s = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.full,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     backgroundColor: Colors.white,
     height: 34,
@@ -768,7 +772,7 @@ const s = StyleSheet.create({
     lineHeight: 18,
   },
   skillChipTextActive: { color: Colors.white },
-  
+
   // Results header
   resultsHeader: {
     flexDirection: "row",
@@ -789,12 +793,16 @@ const s = StyleSheet.create({
   },
 
   // List
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg, gap: 10 },
+  listContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+    gap: 10,
+  },
 
   // Card
   card: {
     backgroundColor: Colors.white,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.lg,
     overflow: "hidden",
@@ -842,7 +850,7 @@ const s = StyleSheet.create({
     paddingBottom: Spacing.sm,
   },
   tag: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.sm,
     paddingHorizontal: Spacing.sm,
@@ -943,7 +951,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between" as const,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
   cityModalTitle: {
@@ -986,7 +994,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between" as const,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   cityItemSelected: {
@@ -1024,7 +1032,7 @@ const s = StyleSheet.create({
 const sk = StyleSheet.create({
   card: {
     backgroundColor: Colors.white,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.lg,
     padding: Spacing.md,

@@ -31,6 +31,17 @@ import Divider from "../../components/ui/Divider";
 import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import { VIBES } from "../../constants/Vibes";
+import {
+  GestureHandlerRootView,
+  GestureDetector,
+  Gesture,
+} from "react-native-gesture-handler";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  clamp,
+} from "react-native-reanimated";
 
 type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
@@ -38,6 +49,8 @@ type Skill = { id: string; name: string; icon: string };
 const GRID_SIZE = Math.floor(
   (Dimensions.get("window").width - Spacing.lg * 2 - 4) / 3,
 );
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const SCREEN_HEIGHT = Dimensions.get("window").height;
 
 // ─── Cloudinary upload ────────────────────────────────────────────────────────
 
@@ -72,6 +85,100 @@ const uploadToCloudinary = async (uri: string): Promise<string | null> => {
     return null;
   }
 };
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+
+function LightboxImage({
+  uri,
+  width,
+  height,
+}: {
+  uri: string;
+  width: number;
+  height: number;
+}) {
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = clamp(savedScale.value * e.scale, 1, 4);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value < 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (scale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1) {
+        scale.value = withSpring(1);
+        savedScale.value = 1;
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withSpring(2);
+        savedScale.value = 2;
+      }
+    });
+
+  const composed = Gesture.Simultaneous(
+    pinchGesture,
+    panGesture,
+    doubleTapGesture,
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
+
+  return (
+    <GestureHandlerRootView style={{ width, height }}>
+      <GestureDetector gesture={composed}>
+        <Animated.View
+          style={{
+            width,
+            height,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Animated.Image
+            source={{ uri }}
+            style={[{ width, height }, animatedStyle]}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </GestureDetector>
+    </GestureHandlerRootView>
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -109,6 +216,10 @@ export default function ProfileScreen() {
   // Reviews
   const [myReviews, setMyReviews] = useState<any[]>([]);
   const [showMyReviewsSheet, setShowMyReviewsSheet] = useState(false);
+
+  // Lightbox
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
@@ -195,8 +306,9 @@ export default function ProfileScreen() {
   const fetchMyReviews = async () => {
     if (!user) return;
     const { data, error } = await supabase
-      .from('reviews')
-      .select(`
+      .from("reviews")
+      .select(
+        `
         id,
         vibes,
         note,
@@ -204,15 +316,17 @@ export default function ProfileScreen() {
         client_id,
         users!reviews_client_id_fkey (
           name,
+          avatar_url,
           city_id,
           cities (
             name
           )
         )
-      `)
-      .eq('freelancer_id', user.id)
-      .order('created_at', { ascending: false });
-    console.log('My reviews:', data?.length, error?.message);
+      `,
+      )
+      .eq("freelancer_id", user.id)
+      .order("created_at", { ascending: false });
+    console.log("My reviews:", data?.length, error?.message);
     if (data) setMyReviews(data as any);
   };
 
@@ -766,7 +880,9 @@ export default function ProfileScreen() {
       {myReviews.length > 0 ? (
         <View style={s.section}>
           <View style={s.reviewsHeaderRow}>
-            <Text style={[TextStyles.label, s.sectionLabel]}>Reviews & Vibes</Text>
+            <Text style={[TextStyles.label, s.sectionLabel]}>
+              Reviews & Vibes
+            </Text>
             <View style={s.reviewCountBadge}>
               <Text style={s.reviewCountText}>{myReviews.length}</Text>
             </View>
@@ -879,9 +995,17 @@ export default function ProfileScreen() {
           <View style={s.portfolioViewWrap}>
             <View style={s.portfolioGrid}>
               {portfolioUrls.map((url, i) => (
-                <View key={i} style={s.portfolioCell}>
+                <TouchableOpacity
+                  key={i}
+                  style={s.portfolioCell}
+                  onPress={() => {
+                    setLightboxIndex(i);
+                    setLightboxVisible(true);
+                  }}
+                  activeOpacity={0.9}
+                >
                   <Image source={{ uri: url }} style={s.portfolioImage} />
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
@@ -900,208 +1024,259 @@ export default function ProfileScreen() {
 
   return (
     <>
-    <SafeAreaView
-      style={[s.container, { position: "relative", zIndex: 100 }]}
-      edges={["top"]}
-    >
-      {/* Header */}
-      <View style={s.header}>
-        {isEditing ? (
+      <SafeAreaView
+        style={[s.container, { position: "relative", zIndex: 100 }]}
+        edges={["top"]}
+      >
+        {/* Header */}
+        <View style={s.header}>
+          {isEditing ? (
+            <>
+              <TouchableOpacity onPress={handleCancel}>
+                <Text style={s.headerAction}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={s.headerTitle}>Edit Profile</Text>
+              <TouchableOpacity
+                onPress={
+                  profile?.role === "client" ? handleClientSave : handleSave
+                }
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color={Colors.green} size="small" />
+                ) : (
+                  <Text style={[s.headerAction, { color: Colors.green }]}>
+                    Save
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={s.headerTitle}>Profile</Text>
+              <TouchableOpacity
+                onPress={() => setShowMenu(!showMenu)}
+                style={s.menuBtn}
+                activeOpacity={0.7}
+              >
+                <Feather name="more-vertical" size={20} color={Colors.black} />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Dropdown menu (top-right) */}
+        {showMenu && (
           <>
-            <TouchableOpacity onPress={handleCancel}>
-              <Text style={s.headerAction}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={s.headerTitle}>Edit Profile</Text>
+            {/* Invisible overlay to close menu on outside tap */}
             <TouchableOpacity
-              onPress={
-                profile?.role === "client" ? handleClientSave : handleSave
-              }
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color={Colors.green} size="small" />
-              ) : (
-                <Text style={[s.headerAction, { color: Colors.green }]}>
-                  Save
+              style={s.menuDismiss}
+              activeOpacity={1}
+              onPress={() => setShowMenu(false)}
+            />
+
+            {/* Dropdown menu */}
+            <View style={s.dropdown}>
+              <TouchableOpacity
+                style={s.dropdownItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  setIsEditing(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="edit-2" size={16} color={Colors.black} />
+                <Text style={s.dropdownText}>Edit profile</Text>
+              </TouchableOpacity>
+
+              <View style={s.dropdownDivider} />
+
+              <TouchableOpacity
+                style={s.dropdownItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  handleSignOut();
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="log-out" size={16} color={Colors.danger} />
+                <Text style={[s.dropdownText, { color: Colors.danger }]}>
+                  Sign out
                 </Text>
-              )}
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={s.headerTitle}>Profile</Text>
-            <TouchableOpacity
-              onPress={() => setShowMenu(!showMenu)}
-              style={s.menuBtn}
-              activeOpacity={0.7}
-            >
-              <Feather name="more-vertical" size={20} color={Colors.black} />
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           </>
         )}
-      </View>
 
-      {/* Dropdown menu (top-right) */}
-      {showMenu && (
-        <>
-          {/* Invisible overlay to close menu on outside tap */}
-          <TouchableOpacity
-            style={s.menuDismiss}
-            activeOpacity={1}
-            onPress={() => setShowMenu(false)}
-          />
+        {profile?.role === "client" ? clientContent : content}
 
-          {/* Dropdown menu */}
-          <View style={s.dropdown}>
+        {/* City bottom sheet (inline, no Modal) */}
+        {showCitySheet && (
+          <>
             <TouchableOpacity
-              style={s.dropdownItem}
-              onPress={() => {
-                setShowMenu(false);
-                setIsEditing(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <Feather name="edit-2" size={16} color={Colors.black} />
-              <Text style={s.dropdownText}>Edit profile</Text>
-            </TouchableOpacity>
-
-            <View style={s.dropdownDivider} />
-
-            <TouchableOpacity
-              style={s.dropdownItem}
-              onPress={() => {
-                setShowMenu(false);
-                handleSignOut();
-              }}
-              activeOpacity={0.7}
-            >
-              <Feather name="log-out" size={16} color={Colors.danger} />
-              <Text style={[s.dropdownText, { color: Colors.danger }]}>
-                Sign out
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
-      {profile?.role === "client" ? clientContent : content}
-
-      {/* City bottom sheet (inline, no Modal) */}
-      {showCitySheet && (
-        <>
-          <TouchableOpacity
-            style={s.overlay}
-            activeOpacity={1}
-            onPress={() => setShowCitySheet(false)}
-          />
-          <View style={s.sheet}>
-            <View style={s.sheetHandle} />
-            <Text style={s.sheetTitle}>Select city</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {cities.map((city) => (
-                <TouchableOpacity
-                  key={city.id}
-                  style={s.cityItem}
-                  onPress={() => {
-                    setCityId(city.id);
-                    setShowCitySheet(false);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      s.cityName,
-                      cityId === city.id && s.cityNameSelected,
-                    ]}
+              style={s.overlay}
+              activeOpacity={1}
+              onPress={() => setShowCitySheet(false)}
+            />
+            <View style={s.sheet}>
+              <View style={s.sheetHandle} />
+              <Text style={s.sheetTitle}>Select city</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {cities.map((city) => (
+                  <TouchableOpacity
+                    key={city.id}
+                    style={s.cityItem}
+                    onPress={() => {
+                      setCityId(city.id);
+                      setShowCitySheet(false);
+                    }}
+                    activeOpacity={0.8}
                   >
-                    {city.name}
-                  </Text>
-                  {cityId === city.id && (
-                    <Feather name="check" size={14} color={Colors.green} />
+                    <Text
+                      style={[
+                        s.cityName,
+                        cityId === city.id && s.cityNameSelected,
+                      ]}
+                    >
+                      {city.name}
+                    </Text>
+                    {cityId === city.id && (
+                      <Feather name="check" size={14} color={Colors.green} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </>
+        )}
+      </SafeAreaView>
+
+      <Modal
+        visible={showMyReviewsSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMyReviewsSheet(false)}
+      >
+        <View style={s.reviewSheetContainer}>
+          <TouchableOpacity
+            style={s.reviewSheetOverlay}
+            activeOpacity={1}
+            onPress={() => setShowMyReviewsSheet(false)}
+          />
+          <View style={s.reviewSheet}>
+            <View style={s.reviewSheetHandle} />
+            <View style={s.reviewSheetHeader}>
+              <Text style={s.reviewSheetTitle}>Your reviews</Text>
+              <TouchableOpacity
+                onPress={() => setShowMyReviewsSheet(false)}
+                activeOpacity={0.7}
+              >
+                <Feather name="x" size={20} color={Colors.black} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={s.reviewSheetContent}
+            >
+              {myReviews.map((review, index) => (
+                <View key={review.id}>
+                  <View style={s.reviewItem}>
+                    <View style={s.reviewClientRow}>
+                      <Avatar
+                        uri={(review as any).users?.avatar_url}
+                        name={(review as any).users?.name}
+                        size="sm"
+                      />
+                      <View style={s.reviewClientInfo}>
+                        <Text style={s.reviewClientName}>
+                          {(review as any).users?.name ?? "Client"}
+                        </Text>
+                        <Text style={s.reviewClientMeta}>
+                          {(review as any).users?.cities?.name ?? ""}
+                          {(review as any).users?.cities?.name ? " · " : ""}
+                          {new Date(review.created_at).toLocaleDateString(
+                            "en-IN",
+                            { day: "numeric", month: "short", year: "numeric" },
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={s.reviewVibesRow}>
+                      {(review.vibes ?? []).map((vibeId: string) => {
+                        const vibe = VIBES.find((v) => v.id === vibeId);
+                        if (!vibe) return null;
+                        return (
+                          <View key={vibeId} style={s.reviewVibePill}>
+                            <Text style={s.reviewVibePillText}>
+                              {vibe.emoji} {vibe.label}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                    {review.note ? (
+                      <Text style={s.reviewNoteText}>"{review.note}"</Text>
+                    ) : null}
+                  </View>
+                  {index < myReviews.length - 1 && (
+                    <View style={s.reviewDivider} />
                   )}
-                </TouchableOpacity>
+                </View>
               ))}
             </ScrollView>
           </View>
-        </>
-      )}
-    </SafeAreaView>
+        </View>
+      </Modal>
 
-    <Modal
-      visible={showMyReviewsSheet}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowMyReviewsSheet(false)}
-    >
-      <View style={s.reviewSheetContainer}>
-        <TouchableOpacity
-          style={s.reviewSheetOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMyReviewsSheet(false)}
-        />
-        <View style={s.reviewSheet}>
-          <View style={s.reviewSheetHandle} />
-          <View style={s.reviewSheetHeader}>
-            <Text style={s.reviewSheetTitle}>Your reviews</Text>
-            <TouchableOpacity
-              onPress={() => setShowMyReviewsSheet(false)}
-              activeOpacity={0.7}
-            >
-              <Feather name="x" size={20} color={Colors.black} />
-            </TouchableOpacity>
+      <Modal
+        visible={lightboxVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightboxVisible(false)}
+        statusBarTranslucent
+      >
+        <View style={s.lightboxContainer}>
+          <View style={s.lightboxOverlay} />
+
+          <View style={s.lightboxCounter}>
+            <Text style={s.lightboxCounterText}>
+              {lightboxIndex + 1} / {portfolioUrls.length}
+            </Text>
           </View>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={s.reviewSheetContent}
+
+          <TouchableOpacity
+            style={s.lightboxClose}
+            onPress={() => setLightboxVisible(false)}
+            activeOpacity={0.7}
           >
-            {myReviews.map((review, index) => (
-              <View key={review.id}>
-                <View style={s.reviewItem}>
-                  <View style={s.reviewClientRow}>
-                    <Avatar
-                      name={(review as any).users?.name}
-                      size="sm"
-                    />
-                    <View style={s.reviewClientInfo}>
-                      <Text style={s.reviewClientName}>
-                        {(review as any).users?.name ?? 'Client'}
-                      </Text>
-                      <Text style={s.reviewClientMeta}>
-                        {(review as any).users?.cities?.name ?? ''}
-                        {(review as any).users?.cities?.name ? ' · ' : ''}
-                        {new Date(review.created_at).toLocaleDateString(
-                          'en-IN',
-                          { day: 'numeric', month: 'short', year: 'numeric' },
-                        )}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={s.reviewVibesRow}>
-                    {(review.vibes ?? []).map((vibeId: string) => {
-                      const vibe = VIBES.find((v) => v.id === vibeId);
-                      if (!vibe) return null;
-                      return (
-                        <View key={vibeId} style={s.reviewVibePill}>
-                          <Text style={s.reviewVibePillText}>
-                            {vibe.emoji} {vibe.label}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                  {review.note ? (
-                    <Text style={s.reviewNoteText}>"{review.note}"</Text>
-                  ) : null}
-                </View>
-                {index < myReviews.length - 1 && (
-                  <View style={s.reviewDivider} />
-                )}
-              </View>
+            <Feather name="x" size={24} color={Colors.white} />
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            contentOffset={{ x: lightboxIndex * SCREEN_WIDTH, y: 0 }}
+            onMomentumScrollEnd={(e) => {
+              const index = Math.round(
+                e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+              );
+              setLightboxIndex(index);
+            }}
+            style={s.lightboxScroll}
+          >
+            {portfolioUrls.map((url, i) => (
+              <LightboxImage
+                key={i}
+                uri={url}
+                width={SCREEN_WIDTH}
+                height={SCREEN_HEIGHT}
+              />
             ))}
           </ScrollView>
         </View>
-      </View>
-    </Modal>
+      </Modal>
     </>
   );
 }
@@ -1116,7 +1291,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Layout.screenPadding,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   headerTitle: {
@@ -1175,7 +1350,7 @@ const s = StyleSheet.create({
   // Skill pills (view mode)
   skillPills: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
   skillPill: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.md,
@@ -1237,7 +1412,7 @@ const s = StyleSheet.create({
   },
   textInput: {
     height: Layout.inputHeight,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -1250,7 +1425,7 @@ const s = StyleSheet.create({
   // Edit mode — city
   citySelector: {
     height: Layout.inputHeight,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
@@ -1289,7 +1464,7 @@ const s = StyleSheet.create({
     width: "31%",
     alignItems: "center",
     paddingVertical: Spacing.md,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     backgroundColor: Colors.white,
@@ -1312,7 +1487,7 @@ const s = StyleSheet.create({
   // Edit mode — bio
   bioWrap: { marginBottom: Spacing.xl },
   bioInput: {
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     padding: Spacing.md,
@@ -1347,7 +1522,7 @@ const s = StyleSheet.create({
     width: GRID_SIZE,
     height: GRID_SIZE,
     backgroundColor: Colors.grey100,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
@@ -1367,7 +1542,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 14,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   infoRowLast: { borderBottomWidth: 0 },
@@ -1415,7 +1590,7 @@ const s = StyleSheet.create({
     right: Spacing.xl,
     backgroundColor: Colors.white,
     borderRadius: Radius.md,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     minWidth: 160,
     zIndex: 999,
@@ -1471,7 +1646,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
   cityName: {
@@ -1491,7 +1666,7 @@ const s = StyleSheet.create({
     padding: Spacing.lg,
     backgroundColor: Colors.greenLight,
     borderRadius: Radius.lg,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.green,
   },
   completionHeader: {
@@ -1542,8 +1717,8 @@ const s = StyleSheet.create({
 
   // Reviews
   reviewsHeaderRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
@@ -1552,7 +1727,7 @@ const s = StyleSheet.create({
     borderRadius: Radius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
-    marginTop:-8,
+    marginTop: -8,
   },
   reviewCountText: {
     fontFamily: FontFamily.medium,
@@ -1560,14 +1735,14 @@ const s = StyleSheet.create({
     color: Colors.grey500,
   },
   vibeSummaryRow: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
     gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
   vibePill: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     gap: Spacing.xs,
     backgroundColor: Colors.grey100,
     borderRadius: Radius.full,
@@ -1586,11 +1761,11 @@ const s = StyleSheet.create({
     color: Colors.grey500,
   },
   seeAllBtn: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     gap: Spacing.sm,
-    borderWidth: 0.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     borderRadius: Radius.md,
     paddingVertical: Spacing.md,
@@ -1605,18 +1780,18 @@ const s = StyleSheet.create({
     backgroundColor: Colors.grey100,
     borderRadius: Radius.md,
     padding: Spacing.lg,
-    alignItems: 'center' as const,
+    alignItems: "center" as const,
   },
   noReviewsText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.sm,
     color: Colors.grey500,
-    textAlign: 'center' as const,
+    textAlign: "center" as const,
     lineHeight: FontSize.sm * 1.6,
   },
   reviewSheetContainer: {
     flex: 1,
-    justifyContent: 'flex-end' as const,
+    justifyContent: "flex-end" as const,
   },
   reviewSheetOverlay: {
     flex: 1,
@@ -1626,7 +1801,7 @@ const s = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
-    maxHeight: '80%' as any,
+    maxHeight: "80%" as any,
     paddingTop: Spacing.md,
   },
   reviewSheetHandle: {
@@ -1634,16 +1809,16 @@ const s = StyleSheet.create({
     height: 3,
     backgroundColor: Colors.grey200,
     borderRadius: Radius.full,
-    alignSelf: 'center' as const,
+    alignSelf: "center" as const,
     marginBottom: Spacing.md,
   },
   reviewSheetHeader: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.md,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
   reviewSheetTitle: {
@@ -1660,8 +1835,8 @@ const s = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   reviewClientRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     gap: Spacing.sm,
   },
   reviewClientInfo: {
@@ -1679,8 +1854,8 @@ const s = StyleSheet.create({
     color: Colors.grey400,
   },
   reviewVibesRow: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
     gap: Spacing.xs,
   },
   reviewVibePill: {
@@ -1699,10 +1874,52 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.black,
     lineHeight: FontSize.base * 1.6,
-    fontStyle: 'italic' as const,
+    fontStyle: "italic" as const,
   },
   reviewDivider: {
     height: 0.5,
     backgroundColor: Colors.border,
+  },
+
+  // Lightbox
+  lightboxContainer: {
+    flex: 1,
+    backgroundColor: Colors.overlayDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lightboxOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.overlayDark,
+  },
+  lightboxCounter: {
+    position: "absolute",
+    top: 56,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 10,
+  },
+  lightboxCounterText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.sm,
+    color: Colors.white,
+    opacity: 0.8,
+  },
+  lightboxClose: {
+    position: "absolute",
+    top: 52,
+    right: Spacing.xl,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: Radius.full,
+  },
+  lightboxScroll: {
+    flex: 1,
+    width: SCREEN_WIDTH,
   },
 });
