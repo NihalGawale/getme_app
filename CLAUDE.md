@@ -68,7 +68,7 @@ components/
     OfflineBanner.tsx          netinfo connectivity banner; renders null when online
     PrimaryButton.tsx          Simplified primary button wrapper (no loading prop)
     SecondaryButton.tsx        Simplified secondary button with optional leading icon
-    StepIndicator.tsx          Horizontal pill progress bar for onboarding steps
+    StepIndicator.tsx          Horizontal pill progress bar; currently unused — onboarding screens hand-roll their own inline progress bars
 
 constants/
   Colors.ts                    Full color palette + semantic tokens
@@ -233,7 +233,7 @@ refreshProfile()// re-fetches profile row after edits
 | icon | text (emoji) |
 | is_active | boolean |
 
-Custom RPC: `mark_messages_read(conversation_id, user_id)` — marks all received messages as read.
+Read receipts are marked via direct `.update({ is_read: true })` calls (chat screen, tab layout, messages list) — no RPC is used for this.
 
 ---
 
@@ -248,7 +248,6 @@ Custom RPC: `mark_messages_read(conversation_id, user_id)` — marks all receive
 - City picker: centered Modal with searchable input and `city.state` subtitle
 - Animated skeleton loading cards (opacity pulse) while fetching
 - Pull-to-refresh
-- PostHog analytics events
 
 ### Messages (`/(tabs)/messages`)
 - Conversations sorted by `last_message_at`; re-fetched on tab focus (`useFocusEffect`)
@@ -259,7 +258,7 @@ Custom RPC: `mark_messages_read(conversation_id, user_id)` — marks all receive
 - Empty state with "Browse freelancers →" CTA
 
 ### Chat (`/chat/[id]`)
-- Real-time Supabase subscription (INSERT + UPDATE) + 3s polling fallback
+- Real-time Supabase subscription (INSERT only) + 3s polling fallback
 - Date separators ("Today", "Yesterday", full date)
 - Marks messages read on screen focus; clears on blur
 - Sent messages: **green** bubble (`Colors.green`), right-aligned; received: grey, left-aligned
@@ -400,7 +399,7 @@ Cloudinary upload preset: `getme_profiles` (must exist in Cloudinary dashboard a
 
 **Phone formatting** — Stored with `+91` prefix. Strip formatting on display, add it back before Supabase OTP calls.
 
-**Real-time + polling** — Chat uses Supabase Realtime subscription as primary and `setInterval` (3s) as fallback. Both call the same fetch function; dedup by message ID.
+**Real-time + polling** — Chat uses a Supabase Realtime subscription (INSERT only) that appends new messages directly into state, plus a `setInterval` (3s) fallback that calls `fetchMessages()`. Both paths dedup by message ID.
 
 **Offline detection** — `OfflineBanner` is mounted at the root layout level (no props). Self-contained — subscribes to netinfo internally and renders a red banner when offline.
 
