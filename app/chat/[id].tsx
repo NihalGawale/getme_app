@@ -24,6 +24,7 @@ import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import Avatar from "../../components/ui/Avatar";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import ConfirmModal from "../../components/ui/ConfirmModal";
 import ReviewModal from "../../components/ReviewModal";
 
 type Skill = { id: string; name: string; icon: string };
@@ -125,27 +126,46 @@ export default function ChatScreen() {
     "Something else",
   ];
 
+  // Shared "latest completed job" lookup used by review checks
+  const fetchLatestCompletedJobId = async (): Promise<string | null> => {
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id")
+      .eq("conversation_id", id)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    return job?.id ?? null;
+  };
+
+  // Shared "other participant" lookup used by block/report actions
+  const getOtherUserId = () =>
+    isClientRef.current ? freelancerUserIdRef.current : clientIdRef.current;
+
+  // Shared system-message insert used by hire/complete/review flows
+  const sendSystemMessage = async (content: string) => {
+    if (!user?.id) return;
+    await supabase.from("messages").insert({
+      conversation_id: id,
+      sender_id: user.id,
+      content,
+      is_read: false,
+    });
+  };
+
   const initChat = async () => {
     const checkExistingReview = async () => {
       if (!user?.id || !id) return;
 
-      // Find completed job for this conversation
-      const { data: job } = await supabase
-        .from("jobs")
-        .select("id")
-        .eq("conversation_id", id)
-        .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (!job) return;
+      const jobId = await fetchLatestCompletedJobId();
+      if (!jobId) return;
 
       // Check if review exists for this job
       const { data: review } = await supabase
         .from("reviews")
         .select("id")
-        .eq("job_id", job.id)
+        .eq("job_id", jobId)
         .eq("client_id", user.id)
         .single();
 
@@ -167,13 +187,12 @@ export default function ChatScreen() {
   const fetchOtherUser = async () => {
     if (!user || !id) return;
 
-    const { data: convo, error } = await supabase
+    const { data: convo } = await supabase
       .from("conversations")
       .select("freelancer_id, client_id, job_confirmed")
       .eq("id", id)
       .single();
 
-    console.log("Conversation:", convo, error?.message);
     if (!convo) return;
 
     // Set refs synchronously first
@@ -234,8 +253,6 @@ export default function ChatScreen() {
       .limit(1)
       .single();
 
-    console.log("Job check:", data);
-
     if (!data) {
       setJobConfirmed(false);
       setActiveJobId(null);
@@ -251,9 +268,7 @@ export default function ChatScreen() {
 
   const checkIfBlocked = async () => {
     if (!user?.id) return;
-    const otherId = isClientRef.current
-      ? freelancerUserIdRef.current
-      : clientIdRef.current;
+    const otherId = getOtherUserId();
     if (!otherId) return;
 
     const { data } = await supabase
@@ -271,9 +286,6 @@ export default function ChatScreen() {
   const handleHire = () => {
     const skills = freelancerSkillsRef.current;
     const fId = freelancerUserIdRef.current;
-
-    console.log("handleHire — skills:", skills);
-    console.log("handleHire — freelancerId:", fId);
 
     if (!user || !fId) {
       Alert.alert(
@@ -305,10 +317,6 @@ export default function ChatScreen() {
     const skillIds = pendingSkillIdsRef.current;
     const freelancerId = freelancerUserIdRef.current;
 
-    console.log("confirmJob — skillIds:", skillIds);
-    console.log("confirmJob — freelancerId:", freelancerId);
-    console.log("confirmJob — userId:", user?.id);
-
     if (!freelancerId || !user?.id) {
       Alert.alert("Error", "Missing required information.");
       return;
@@ -326,8 +334,6 @@ export default function ChatScreen() {
       .select()
       .single();
 
-    console.log("Job insert:", jobData, jobError?.message);
-
     if (jobError) {
       Alert.alert("Error", jobError.message);
       return;
@@ -339,13 +345,7 @@ export default function ChatScreen() {
       .update({ job_confirmed: true })
       .eq("id", id);
 
-    // Send system message
-    await supabase.from("messages").insert({
-      conversation_id: id,
-      sender_id: user.id,
-      content: "🎉 Job confirmed on GetMe!",
-      is_read: false,
-    });
+    await sendSystemMessage("🎉 Job confirmed on GetMe!");
 
     // Update local state
     setJobConfirmed(true);
@@ -369,7 +369,6 @@ export default function ChatScreen() {
     setShowConfirmModal(false);
 
     const jobId = activeJobIdRef.current;
-    console.log("markJobComplete — jobId:", jobId);
 
     if (!jobId || !user) {
       Alert.alert("Error", "No active job found.");
@@ -386,21 +385,11 @@ export default function ChatScreen() {
       return;
     }
 
-    // Send system message
-    await supabase.from("messages").insert({
-      conversation_id: id,
-      sender_id: user.id,
-      content: "\u2705 Job marked as complete by the freelancer.",
-      is_read: false,
-    });
-
+    await sendSystemMessage("\u2705 Job marked as complete by the freelancer.");
     // Prompt client to leave a review
-    await supabase.from("messages").insert({
-      conversation_id: id,
-      sender_id: user.id,
-      content: "\u2B50 Job complete! How was working together? Leave a review.",
-      is_read: false,
-    });
+    await sendSystemMessage(
+      "\u2B50 Job complete! How was working together? Leave a review.",
+    );
 
     // Update conversation
     await supabase
@@ -425,19 +414,11 @@ export default function ChatScreen() {
   // ── Review ───────────────────────────────────────────
 
   const handleSubmitReview = async (vibes: string[], note: string) => {
-    const { data: job } = await supabase
-      .from("jobs")
-      .select("id")
-      .eq("conversation_id", id)
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (!job) throw new Error("No completed job found");
+    const jobId = await fetchLatestCompletedJobId();
+    if (!jobId) throw new Error("No completed job found");
 
     const { error } = await supabase.from("reviews").insert({
-      job_id: job.id,
+      job_id: jobId,
       freelancer_id: freelancerUserIdRef.current,
       client_id: user!.id,
       vibes,
@@ -447,21 +428,14 @@ export default function ChatScreen() {
     if (error) throw error;
     setHasReviewed(true);
 
-    await supabase.from("messages").insert({
-      conversation_id: id,
-      sender_id: user!.id,
-      content: "\u270D\uFE0F Review submitted. Thank you!",
-      is_read: false,
-    });
+    await sendSystemMessage("\u270D\uFE0F Review submitted. Thank you!");
   };
 
   // ── Report / Block ────────────────────────────────────
 
   const handleSubmitReport = async () => {
     if (!selectedReportReason || !user?.id) return;
-    const otherId = isClientRef.current
-      ? freelancerUserIdRef.current
-      : clientIdRef.current;
+    const otherId = getOtherUserId();
     if (!otherId) return;
 
     const { error } = await supabase.from("reports").insert({
@@ -488,9 +462,7 @@ export default function ChatScreen() {
 
   const handleBlock = async () => {
     if (!user?.id) return;
-    const otherId = isClientRef.current
-      ? freelancerUserIdRef.current
-      : clientIdRef.current;
+    const otherId = getOtherUserId();
     if (!otherId) return;
 
     const { error } = await supabase.from("blocks").insert({
@@ -514,9 +486,7 @@ export default function ChatScreen() {
 
   const handleUnblock = async () => {
     if (!user?.id) return;
-    const otherId = isClientRef.current
-      ? freelancerUserIdRef.current
-      : clientIdRef.current;
+    const otherId = getOtherUserId();
     if (!otherId) return;
 
     await supabase
@@ -595,7 +565,7 @@ export default function ChatScreen() {
       .eq("id", id);
     setSending(false);
     if (error) {
-      console.log("Send error:", error.message);
+      Alert.alert("Error", "Could not send message. Please try again.");
       setInput(content);
     }
   };
@@ -870,61 +840,25 @@ export default function ChatScreen() {
       </Modal>
 
       {/* ── Confirm modal (hire + complete) ── */}
-      <Modal
+      <ConfirmModal
         visible={showConfirmModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowConfirmModal(false)}
-      >
-        <View style={s.confirmOverlay}>
-          <View style={s.confirmCard}>
-            {confirmModalType === "hire" ? (
-              <>
-                <Text style={s.confirmEmoji}>🤝</Text>
-                <Text style={s.confirmTitle}>Confirm hire?</Text>
-                <Text style={s.confirmSub}>
-                  {`You're about to hire ${freelancerName}`}
-                  {pendingSkillIdsRef.current.length > 0
-                    ? ` for ${pendingSkillIdsRef.current
-                        .map(getSkillName)
-                        .filter(Boolean)
-                        .join(", ")}`
-                    : ""}
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={s.confirmEmoji}>✅</Text>
-                <Text style={s.confirmTitle}>Mark as complete?</Text>
-                <Text style={s.confirmSub}>
-                  This will notify the client that the job is done. They'll be
-                  able to hire you again.
-                </Text>
-              </>
-            )}
-            <View style={s.confirmBtns}>
-              <TouchableOpacity
-                style={s.confirmCancelBtn}
-                onPress={() => setShowConfirmModal(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.confirmActionBtn}
-                onPress={
-                  confirmModalType === "hire" ? confirmJob : markJobComplete
-                }
-                activeOpacity={0.85}
-              >
-                <Text style={s.confirmActionText}>
-                  {confirmModalType === "hire" ? "Confirm" : "Mark complete"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        emoji={confirmModalType === "hire" ? "🤝" : "✅"}
+        title={confirmModalType === "hire" ? "Confirm hire?" : "Mark as complete?"}
+        subtitle={
+          confirmModalType === "hire"
+            ? `You're about to hire ${freelancerName}` +
+              (pendingSkillIdsRef.current.length > 0
+                ? ` for ${pendingSkillIdsRef.current
+                    .map(getSkillName)
+                    .filter(Boolean)
+                    .join(", ")}`
+                : "")
+            : "This will notify the client that the job is done. They'll be able to hire you again."
+        }
+        confirmLabel={confirmModalType === "hire" ? "Confirm" : "Mark complete"}
+        onCancel={() => setShowConfirmModal(false)}
+        onConfirm={confirmModalType === "hire" ? confirmJob : markJobComplete}
+      />
 
       {/* ── Review modal ── */}
       <ReviewModal
@@ -1057,39 +991,16 @@ export default function ChatScreen() {
       </Modal>
 
       {/* ── Block confirmation modal ── */}
-      <Modal
+      <ConfirmModal
         visible={showBlockConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowBlockConfirm(false)}
-      >
-        <View style={s.confirmOverlay}>
-          <View style={s.confirmCard}>
-            <Text style={s.confirmEmoji}>🚫</Text>
-            <Text style={s.confirmTitle}>Block {otherUser?.name}?</Text>
-            <Text style={s.confirmSub}>
-              You will no longer see messages from them, and they won't be able
-              to contact you on GetMe.
-            </Text>
-            <View style={s.confirmBtns}>
-              <TouchableOpacity
-                style={s.confirmCancelBtn}
-                onPress={() => setShowBlockConfirm(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.confirmActionBtn, { backgroundColor: Colors.danger }]}
-                onPress={handleBlock}
-                activeOpacity={0.85}
-              >
-                <Text style={s.confirmActionText}>Block</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        emoji="🚫"
+        title={`Block ${otherUser?.name}?`}
+        subtitle="You will no longer see messages from them, and they won't be able to contact you on GetMe."
+        confirmLabel="Block"
+        onCancel={() => setShowBlockConfirm(false)}
+        onConfirm={handleBlock}
+        danger
+      />
 
       {/* ── Congratulations modal ── */}
       <Modal
@@ -1292,10 +1203,6 @@ const s = StyleSheet.create({
     paddingLeft: 3,
   },
   sendBtnDisabled: { opacity: 0.3 },
-  hireModalContainer: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
   overlay: {
     flex: 1,
     backgroundColor: Colors.overlay,
@@ -1361,57 +1268,7 @@ const s = StyleSheet.create({
   },
   confirmBtnDisabled: { opacity: 0.4 },
 
-  // Confirm modal
-  confirmOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: Spacing.xl,
-  },
-  confirmCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    padding: Spacing.xxxl,
-    alignItems: "center",
-    width: "100%",
-    gap: Spacing.sm,
-  },
-  confirmEmoji: { fontSize: 44, marginBottom: Spacing.xs },
-  confirmTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xl,
-    color: Colors.black,
-    textAlign: "center",
-  },
-  confirmSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.grey500,
-    textAlign: "center",
-    lineHeight: FontSize.md * 1.6,
-    marginBottom: Spacing.sm,
-  },
-  confirmBtns: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-    width: "100%",
-    marginTop: Spacing.sm,
-  },
-  confirmCancelBtn: {
-    flex: 1,
-    height: 48,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  confirmCancelText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.base,
-    color: Colors.grey500,
-  },
+  // Skill-selector "Next" button (also shared shape with ConfirmModal)
   confirmActionBtn: {
     flex: 1,
     height: 48,

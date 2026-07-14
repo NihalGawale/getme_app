@@ -37,6 +37,10 @@ export default function ReviewModal({
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
+    // Only re-seed from existingReview when the modal opens — callers often
+    // pass a new object reference on every render, which would otherwise
+    // reset the user's in-progress edits while the modal is still visible.
+    if (!visible) return
     if (existingReview) {
       setSelectedVibes(existingReview.vibes)
       setNote(existingReview.note ?? '')
@@ -44,7 +48,8 @@ export default function ReviewModal({
       setSelectedVibes([])
       setNote('')
     }
-  }, [visible, existingReview])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
 
   const availableVibes = VIBES.filter(v =>
     hasCompletedJob ? true : v.tier === 1,
@@ -64,8 +69,9 @@ export default function ReviewModal({
     try {
       await onSubmit(selectedVibes, note.trim())
       onClose()
-    } catch (e: any) {
-      Alert.alert('Error', e.message)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Something went wrong'
+      Alert.alert('Error', message)
     } finally {
       setSubmitting(false)
     }

@@ -1,8 +1,9 @@
 import { Redirect } from "expo-router";
 import { useAuth } from "../context/AuthContext";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { Colors } from "../constants/Colors";
 
 export default function Index() {
   const { session, profile, loading, user } = useAuth();
@@ -10,12 +11,22 @@ export default function Index() {
   const [hasFreelancerProfile, setHasFreelancerProfile] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
+  // Keep refs in sync so the timeout below always reads the latest
+  // loading/checkingProfile values instead of the ones from mount.
+  const loadingRef = useRef(loading);
+  const checkingProfileRef = useRef(checkingProfile);
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
+  useEffect(() => {
+    checkingProfileRef.current = checkingProfile;
+  }, [checkingProfile]);
+
   // Timeout fallback — if loading takes more than 5 seconds
   // force a re-check directly from Supabase
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (loading || checkingProfile) {
-        console.log("Auth timeout — forcing session check");
+      if (loadingRef.current || checkingProfileRef.current) {
         setTimedOut(true);
       }
     }, 5000);
@@ -68,7 +79,7 @@ export default function Index() {
   if (loading || checkingProfile) {
     return (
       <View style={s.container}>
-        <ActivityIndicator color="#111" size="large" />
+        <ActivityIndicator color={Colors.black} size="large" />
       </View>
     );
   }
@@ -89,6 +100,6 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: Colors.white,
   },
 });

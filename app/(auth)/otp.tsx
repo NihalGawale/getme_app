@@ -4,12 +4,8 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  StatusBar,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
@@ -17,7 +13,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
-import { Layout } from "../../constants/Layout";
+import AuthScreenHeader from "../../components/AuthScreenHeader";
 
 export default function OTPScreen() {
   const router = useRouter();
@@ -186,118 +182,75 @@ export default function OTPScreen() {
   };
 
   return (
-    <SafeAreaView style={s.safeArea} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        style={s.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
-
-        <View style={s.progress}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <View key={i} style={[s.bar, i < 3 && s.barActive]} />
+    <AuthScreenHeader
+      step={3}
+      title="Check your messages"
+      subtitle={`We sent a code to ${phone}.`}
+      keyboardAvoiding
+    >
+      {/* OTP container: visual boxes + real input overlay */}
+      <View style={s.otpContainer}>
+        {/* Visual boxes — display only, no touch events */}
+        <View style={s.otpBoxesRow} pointerEvents="none">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <View
+              key={i}
+              style={[
+                s.otpBox,
+                otp.length === i && s.otpBoxActive,
+                otp.length > i && s.otpBoxFilled,
+              ]}
+            >
+              <Text style={s.otpDigit}>{otp[i] ?? ""}</Text>
+            </View>
           ))}
         </View>
 
-        <Text style={s.title}>Check your messages</Text>
-        <Text style={s.sub}>We sent a code to {phone}.</Text>
+        {/* Real input — covers the box row, nearly invisible but visible to iOS */}
+        <TextInput
+          ref={inputRef}
+          style={s.realInput}
+          value={otp}
+          onChangeText={handleOtpChange}
+          keyboardType="number-pad"
+          textContentType="oneTimeCode"
+          autoComplete="one-time-code"
+          autoFocus={true}
+          maxLength={6}
+          caretHidden={true}
+          contextMenuHidden={true}
+          selectionColor="transparent"
+        />
+      </View>
 
-        {/* OTP container: visual boxes + real input overlay */}
-        <View style={s.otpContainer}>
-          {/* Visual boxes — display only, no touch events */}
-          <View style={s.otpBoxesRow} pointerEvents="none">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <View
-                key={i}
-                style={[
-                  s.otpBox,
-                  otp.length === i && s.otpBoxActive,
-                  otp.length > i && s.otpBoxFilled,
-                ]}
-              >
-                <Text style={s.otpDigit}>{otp[i] ?? ""}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Real input — covers the box row, nearly invisible but visible to iOS */}
-          <TextInput
-            ref={inputRef}
-            style={s.realInput}
-            value={otp}
-            onChangeText={handleOtpChange}
-            keyboardType="number-pad"
-            textContentType="oneTimeCode"
-            autoComplete="one-time-code"
-            autoFocus={true}
-            maxLength={6}
-            caretHidden={true}
-            contextMenuHidden={true}
-            selectionColor="transparent"
-          />
-        </View>
-
-        <View style={s.resendRow}>
-          <Text style={s.resendTimer}>Didn't receive it?</Text>
-          <TouchableOpacity
-            onPress={handleResend}
-            disabled={!canResend}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.resendLink, !canResend && s.resendDisabled]}>
-              {canResend ? "Resend OTP" : `Resend in ${resendTimer}s`}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ flex: 1 }} />
-
+      <View style={s.resendRow}>
+        <Text style={s.resendTimer}>Didn't receive it?</Text>
         <TouchableOpacity
-          style={[s.btn, (otp.length < 6 || loading) && s.btnDisabled]}
-          onPress={() => handleVerify()}
-          activeOpacity={0.85}
-          disabled={otp.length < 6 || loading}
+          onPress={handleResend}
+          disabled={!canResend}
+          activeOpacity={0.7}
         >
-          <Text style={s.btnText}>{loading ? "Verifying..." : "Verify"}</Text>
+          <Text style={[s.resendLink, !canResend && s.resendDisabled]}>
+            {canResend ? "Resend OTP" : `Resend in ${resendTimer}s`}
+          </Text>
         </TouchableOpacity>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+
+      <View style={{ flex: 1 }} />
+
+      <TouchableOpacity
+        style={[s.btn, (otp.length < 6 || loading) && s.btnDisabled]}
+        onPress={() => handleVerify()}
+        activeOpacity={0.85}
+        disabled={otp.length < 6 || loading}
+      >
+        <Text style={s.btnText}>{loading ? "Verifying..." : "Verify"}</Text>
+      </TouchableOpacity>
+    </AuthScreenHeader>
   );
 }
 
 const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.white },
-  container: {
-    flex: 1,
-    paddingHorizontal: Layout.screenPadding,
-    paddingTop: 56,
-    paddingBottom: 40,
-  },
-
-  // Progress bar
-  progress: { flexDirection: "row", gap: Spacing.xs, marginBottom: 28 },
-  bar: {
-    flex: 1,
-    height: 3,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.grey200,
-  },
-  barActive: { backgroundColor: Colors.black },
-
-  // Heading
-  title: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xl,
-    color: Colors.black,
-    marginBottom: Spacing.sm,
-  },
-  sub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.grey500,
-    marginBottom: Spacing.xxl,
-  },
-
   // OTP container
   otpContainer: {
     position: "relative",
@@ -356,11 +309,6 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  resendLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.grey300,
   },
   resendLink: {
     fontFamily: FontFamily.medium,

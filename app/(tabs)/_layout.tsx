@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HouseIcon, ChatCircleIcon, UserIcon } from "phosphor-react-native";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { getUnreadCount } from "../../lib/conversations";
 import { Colors } from "../../constants/Colors";
 import { Radius } from "../../constants/Spacing";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -90,16 +91,9 @@ export default function TabLayout() {
       }
 
       const convoIds = convos.map((c) => c.id);
+      const count = await getUnreadCount(convoIds, user.id);
 
-      const { count, error } = await supabase
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .in("conversation_id", convoIds)
-        .eq("is_read", false)
-        .neq("sender_id", user.id);
-
-      console.log("Unread count:", count, error?.message);
-      setUnreadCount(count ?? 0);
+      setUnreadCount(count);
     } catch (e) {
       console.log("fetchUnreadCount error:", e);
     }
@@ -116,7 +110,6 @@ export default function TabLayout() {
           table: "messages",
         },
         () => {
-          console.log("New message — refreshing badge");
           fetchUnreadCount();
         },
       )
@@ -128,13 +121,10 @@ export default function TabLayout() {
           table: "messages",
         },
         () => {
-          console.log("Message updated — refreshing badge");
           fetchUnreadCount();
         },
       )
-      .subscribe((status) => {
-        console.log("Badge subscription status:", status);
-      });
+      .subscribe();
 
     return () => subscription.unsubscribe();
   };
@@ -177,7 +167,7 @@ export default function TabLayout() {
 const s = StyleSheet.create({
   tabBar: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#E8E8E8",
+    borderTopColor: Colors.border,
     backgroundColor: Colors.white,
     height: 88,
     paddingBottom: 28,

@@ -8,14 +8,11 @@ import {
   ScrollView,
   Alert,
   Image,
-  Modal,
-  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import * as ImagePicker from "expo-image-picker";
-import { Feather } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
@@ -25,62 +22,11 @@ import { Layout } from "../../constants/Layout";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import FeatherIcon from "../../components/ui/FeatherIcon";
+import CityPickerModal from "../../components/CityPickerModal";
+import { uploadToCloudinary } from "../../lib/cloudinary";
+import type { City } from "../../types/city";
 
-type City = { id: string; name: string; state: string };
 type Skill = { id: string; name: string; icon: string };
-
-const DEFAULT_SKILLS = [
-  {
-    id: "",
-    name: "Photography",
-    icon: <FeatherIcon name="camera" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Videography",
-    icon: <FeatherIcon name="video" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Video Editing",
-    icon: <FeatherIcon name="scissors" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Graphic Design",
-    icon: <FeatherIcon name="pen-tool" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Drone Operation",
-    icon: <FeatherIcon name="navigation" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Voice Over",
-    icon: <FeatherIcon name="mic" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "DJ / Music",
-    icon: <FeatherIcon name="music" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Copywriting",
-    icon: <FeatherIcon name="edit-3" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Motion Graphics",
-    icon: <FeatherIcon name="activity" size={22} color="#888" />,
-  },
-  {
-    id: "",
-    name: "Social Media",
-    icon: <FeatherIcon name="smartphone" size={22} color="#888" />,
-  },
-];
 
 export default function FreelancerProfileScreen() {
   const router = useRouter();
@@ -95,18 +41,14 @@ export default function FreelancerProfileScreen() {
   const [customSkill, setCustomSkill] = useState("");
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
-  console.log(customSkill, "custom skill ------------");
-
   // Data state
   const [cities, setCities] = useState<City[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedCity, setSelectedCity] = useState<City | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [showCityModal, setShowCityModal] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
   const [showCustomSkill, setShowCustomSkill] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     fetchCitiesAndSkills();
@@ -125,12 +67,6 @@ export default function FreelancerProfileScreen() {
     if (skillsData) setSkills(skillsData);
   };
 
-  const filteredCities = useMemo(() => {
-    const query = citySearch.trim().toLowerCase();
-    if (!query) return cities;
-    return cities.filter((city) => city.name.toLowerCase().startsWith(query));
-  }, [cities, citySearch]);
-
   const toggleSkill = (skillId: string) => {
     setSelectedSkills((prev) =>
       prev.includes(skillId)
@@ -139,27 +75,23 @@ export default function FreelancerProfileScreen() {
     );
   };
 
-const addCustomSkill = async () => {
-  if (!customSkill.trim()) return;
-  const { data, error } = await supabase
-    .from("skills")
-    .insert({ name: customSkill.trim(), icon: "⭐", is_active: true })
-    .select()
-    .single();
+  const addCustomSkill = async () => {
+    if (!customSkill.trim()) return;
+    const { data, error } = await supabase
+      .from("skills")
+      .insert({ name: customSkill.trim(), icon: "⭐", is_active: true })
+      .select()
+      .single();
 
-  console.log('Insert skill data:', data);
-  console.log('Insert skill error:', error?.message);
-  console.log('Insert skill error details:', JSON.stringify(error));
-
-  if (data) {
-    setSkills((prev) => [...prev, data]);
-    setSelectedSkills((prev) => [...prev, data.id]);
-    setCustomSkill("");
-    setShowCustomSkill(false);
-  } else {
-    console.log('No data returned, skill not added');
-  }
-};
+    if (data) {
+      setSkills((prev) => [...prev, data]);
+      setSelectedSkills((prev) => [...prev, data.id]);
+      setCustomSkill("");
+      setShowCustomSkill(false);
+    } else {
+      Alert.alert("Error", error?.message ?? "Could not add skill");
+    }
+  };
   const pickProfilePhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -169,36 +101,6 @@ const addCustomSkill = async () => {
     });
     if (!result.canceled) {
       setProfilePhoto(result.assets[0].uri);
-    }
-  };
-
-  const uploadPhotoToCloudinary = async (
-    uri: string,
-  ): Promise<string | null> => {
-    try {
-      setUploadingPhoto(true);
-      const formData = new FormData();
-      formData.append("file", {
-        uri,
-        type: "image/jpeg",
-        name: "profile.jpg",
-      } as any);
-      formData.append("upload_preset", "getme_profiles");
-      formData.append(
-        "cloud_name",
-        process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME!,
-      );
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-        { method: "POST", body: formData },
-      );
-      const data = await response.json();
-      setUploadingPhoto(false);
-      return data.secure_url ?? null;
-    } catch (e) {
-      setUploadingPhoto(false);
-      return null;
     }
   };
 
@@ -216,7 +118,7 @@ const addCustomSkill = async () => {
     try {
       let avatarUrl: string | null = null;
       if (profilePhoto) {
-        avatarUrl = await uploadPhotoToCloudinary(profilePhoto);
+        avatarUrl = await uploadToCloudinary(profilePhoto);
       }
 
       const { error: userError } = await supabase
@@ -237,6 +139,8 @@ const addCustomSkill = async () => {
             user_id: user.id,
             bio: bio.trim(),
             skills: selectedSkills,
+            whatsapp_number: whatsapp.trim() || null,
+            instagram_handle: instagram.trim() || null,
             is_published: true,
           },
           {
@@ -282,7 +186,7 @@ const addCustomSkill = async () => {
               <FeatherIcon
                 name="camera"
                 size={24}
-                color={"#888"}
+                color={Colors.grey500}
                 style={s.photoIcon}
               />
               <Text style={s.photoText}>Add photo</Text>
@@ -322,10 +226,7 @@ const addCustomSkill = async () => {
         </Text>
         <TouchableOpacity
           style={s.dropdown}
-          onPress={() => {
-            setCitySearch("");
-            setShowCityModal(true);
-          }}
+          onPress={() => setShowCityModal(true)}
           activeOpacity={0.8}
         >
           <Text
@@ -336,7 +237,7 @@ const addCustomSkill = async () => {
           <FeatherIcon
             name="chevron-down"
             size={18}
-            color={"#888"}
+            color={Colors.grey500}
             style={s.dropdownArrow}
           />
         </TouchableOpacity>
@@ -376,7 +277,7 @@ const addCustomSkill = async () => {
             <FeatherIcon
               name="plus"
               size={22}
-              color="#888"
+              color={Colors.grey500}
               style={s.skillIcon}
             />
             <Text style={s.skillLabel}>Add more</Text>
@@ -464,97 +365,16 @@ const addCustomSkill = async () => {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* City modal */}
-      <Modal
+      <CityPickerModal
         visible={showCityModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCityModal(false)}
-      >
-        <View style={s.cityModalContainer}>
-          <View style={s.cityModalCard}>
-            <View style={s.cityModalHeader}>
-              <Text style={s.cityModalTitle}>Select city</Text>
-              <TouchableOpacity
-                onPress={() => setShowCityModal(false)}
-                activeOpacity={0.7}
-                style={s.cityModalClose}
-              >
-                <Feather name="x" size={20} color={Colors.black} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={s.citySearchWrap}>
-              <Feather
-                name="search"
-                size={16}
-                color={Colors.grey400}
-                style={s.citySearchIcon}
-              />
-              <TextInput
-                style={s.citySearchInput}
-                placeholder="Search city..."
-                placeholderTextColor={Colors.grey300}
-                value={citySearch}
-                onChangeText={setCitySearch}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus={true}
-              />
-              {citySearch.length > 0 && (
-                <TouchableOpacity onPress={() => setCitySearch("")}>
-                  <Feather name="x-circle" size={16} color={Colors.grey400} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <FlatList
-              data={filteredCities}
-              extraData={citySearch}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={s.cityList}
-              ListEmptyComponent={
-                <View style={s.cityEmptyWrap}>
-                  <Text style={s.cityEmptyText}>
-                    No cities found for "{citySearch}"
-                  </Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    s.cityItem,
-                    selectedCity?.id === item.id && s.cityItemSelected,
-                  ]}
-                  onPress={() => {
-                    setSelectedCity(item);
-                    setShowCityModal(false);
-                    setCitySearch("");
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.cityItemLeft}>
-                    <Text
-                      style={[
-                        s.cityItemName,
-                        selectedCity?.id === item.id && s.cityItemNameSelected,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text style={s.cityItemState}>{item.state}</Text>
-                  </View>
-                  {selectedCity?.id === item.id && (
-                    <Feather name="check" size={16} color={Colors.green} />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
+        cities={cities}
+        selectedCityId={selectedCity?.id}
+        onSelect={(city) => {
+          setSelectedCity(city);
+          setShowCityModal(false);
+        }}
+        onClose={() => setShowCityModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -707,90 +527,4 @@ const s = StyleSheet.create({
     marginTop: Spacing.md,
   },
 
-  // City modal
-  cityModalContainer: {
-    flex: 1,
-    backgroundColor: Colors.overlay,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing.xl,
-  },
-  cityModalCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    width: "100%",
-    maxHeight: "80%",
-    overflow: "hidden",
-  },
-  cityModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
-  cityModalTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.lg,
-    color: Colors.black,
-  },
-  cityModalClose: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  citySearchWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    margin: Spacing.lg,
-    backgroundColor: Colors.grey100,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    height: 44,
-  },
-  citySearchIcon: { flexShrink: 0 },
-  citySearchInput: {
-    flex: 1,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    color: Colors.black,
-    height: 44,
-  },
-  cityList: { maxHeight: 400 },
-  cityItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.grey100,
-  },
-  cityItemSelected: { backgroundColor: Colors.greenLight },
-  cityItemLeft: { gap: 2 },
-  cityItemName: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    color: Colors.black,
-  },
-  cityItemNameSelected: {
-    fontFamily: FontFamily.medium,
-    color: Colors.greenDark,
-  },
-  cityItemState: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: Colors.grey400,
-  },
-  cityEmptyWrap: { padding: Spacing.xxxl, alignItems: "center" },
-  cityEmptyText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.grey400,
-    textAlign: "center",
-  },
 });

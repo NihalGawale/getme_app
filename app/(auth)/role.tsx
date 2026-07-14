@@ -1,21 +1,13 @@
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  Linking,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Feather } from "@expo/vector-icons";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Button from "../../components/ui/Button";
 import FeatherIcon from "../../components/ui/FeatherIcon";
+import AuthScreenHeader from "../../components/AuthScreenHeader";
 
 export default function RoleScreen() {
   const router = useRouter();
@@ -33,7 +25,7 @@ export default function RoleScreen() {
         <FeatherIcon
           name="search"
           size={22}
-          color={selected === "client" ? "white" : "black"}
+          color={selected === "client" ? Colors.white : Colors.black}
         />
       ),
     },
@@ -45,7 +37,7 @@ export default function RoleScreen() {
         <FeatherIcon
           name="briefcase"
           size={22}
-          color={selected === "freelancer" ? "white" : "black"}
+          color={selected === "freelancer" ? Colors.white : Colors.black}
         />
       ),
     },
@@ -57,15 +49,11 @@ export default function RoleScreen() {
   };
 
   return (
-    <SafeAreaView style={s.container} edges={["top", "bottom"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.white} />
-      <View style={s.progress}>
-        {[0, 1, 2, 3, 4].map((i) => (
-          <View key={i} style={[s.bar, i === 0 && s.barActive]} />
-        ))}
-      </View>
-      <Text style={s.title}>What brings you to GetMe?</Text>
-      <Text style={s.sub}>We'll set up your experience based on this.</Text>
+    <AuthScreenHeader
+      step={1}
+      title="What brings you to GetMe?"
+      subtitle="We'll set up your experience based on this."
+    >
       <View style={s.cards}>
         {roles.map((r) => (
           <TouchableOpacity
@@ -101,7 +89,7 @@ export default function RoleScreen() {
       >
         <View style={[s.checkbox, agreedToTerms && s.checkboxChecked]}>
           {agreedToTerms && (
-            <Feather name="check" size={12} color={Colors.white} />
+            <FeatherIcon name="check" size={12} color={Colors.white} />
           )}
         </View>
         <Text style={s.consentText}>
@@ -133,39 +121,11 @@ export default function RoleScreen() {
         disabled={!canContinue}
         style={s.continueBtn}
       />
-    </SafeAreaView>
+    </AuthScreenHeader>
   );
 }
 
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    paddingHorizontal: Layout.screenPadding,
-    paddingTop: 56,
-    paddingBottom: 40,
-  },
-  progress: { flexDirection: "row", gap: Spacing.xs, marginBottom: 28 },
-  bar: {
-    flex: 1,
-    height: 3,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.grey200,
-  },
-  barActive: { backgroundColor: Colors.black },
-  title: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xl,
-    color: Colors.black,
-    marginBottom: Spacing.sm,
-  },
-  sub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.grey500,
-    marginBottom: Spacing.xxl,
-    lineHeight: 20,
-  },
   cards: { gap: 10, flex: 1 },
   card: {
     flexDirection: "row",

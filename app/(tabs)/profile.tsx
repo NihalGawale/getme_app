@@ -30,153 +30,160 @@ import Card from "../../components/ui/Card";
 import Divider from "../../components/ui/Divider";
 import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import { VIBES } from "../../constants/Vibes";
-import {
-  GestureHandlerRootView,
-  GestureDetector,
-  Gesture,
-} from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  clamp,
-} from "react-native-reanimated";
+import SkillPills from "../../components/SkillPills";
+import { VibeSummaryPills, ReviewVibePills } from "../../components/VibePills";
+import PortfolioGrid from "../../components/PortfolioGrid";
+import PortfolioLightbox from "../../components/PortfolioLightbox";
+import { uploadToCloudinary } from "../../lib/cloudinary";
+import { formatMemberSince } from "../../lib/format";
+import type { City } from "../../types/city";
+import type { Review } from "../../types/review";
 
-type City = { id: string; name: string };
 type Skill = { id: string; name: string; icon: string };
+
+type OriginalProfileData = {
+  fn: string;
+  ln: string;
+  av: string | null;
+  cid: string | null;
+  b: string;
+  sk: string[];
+  pu?: string[];
+};
 
 const GRID_SIZE = Math.floor(
   (Dimensions.get("window").width - Spacing.lg * 2 - 4) / 3,
 );
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const SCREEN_HEIGHT = Dimensions.get("window").height;
 
-// ─── Cloudinary upload ────────────────────────────────────────────────────────
+// ─── Shared edit-mode fields (used by both client and freelancer forms) ──────
 
-const uploadToCloudinary = async (uri: string): Promise<string | null> => {
-  try {
-    console.log("Starting Cloudinary upload...");
-    console.log("Cloud name:", process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME);
-
-    const formData = new FormData();
-    formData.append("file", {
-      uri,
-      type: "image/jpeg",
-      name: "upload.jpg",
-    } as any);
-    formData.append("upload_preset", "getme_profiles");
-    formData.append(
-      "cloud_name",
-      process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME!,
-    );
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData },
-    );
-
-    const data = await response.json();
-    console.log("Cloudinary response:", JSON.stringify(data));
-
-    return data.secure_url ?? null;
-  } catch (e) {
-    console.log("Cloudinary upload error:", e);
-    return null;
-  }
-};
-
-// ─── Lightbox ─────────────────────────────────────────────────────────────────
-
-function LightboxImage({
-  uri,
-  width,
-  height,
+function NameFields({
+  firstName,
+  lastName,
+  onFirstNameChange,
+  onLastNameChange,
 }: {
-  uri: string;
-  width: number;
-  height: number;
+  firstName: string;
+  lastName: string;
+  onFirstNameChange: (v: string) => void;
+  onLastNameChange: (v: string) => void;
 }) {
-  const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      scale.value = clamp(savedScale.value * e.scale, 1, 4);
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-      if (scale.value < 1) {
-        scale.value = withSpring(1);
-        savedScale.value = 1;
-      }
-    });
-
-  const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      if (scale.value > 1) {
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
-      }
-    })
-    .onEnd(() => {
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
-    });
-
-  const doubleTapGesture = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      if (scale.value > 1) {
-        scale.value = withSpring(1);
-        savedScale.value = 1;
-        translateX.value = withSpring(0);
-        translateY.value = withSpring(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      } else {
-        scale.value = withSpring(2);
-        savedScale.value = 2;
-      }
-    });
-
-  const composed = Gesture.Simultaneous(
-    pinchGesture,
-    panGesture,
-    doubleTapGesture,
-  );
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
-
   return (
-    <GestureHandlerRootView style={{ width, height }}>
-      <GestureDetector gesture={composed}>
-        <Animated.View
-          style={{
-            width,
-            height,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+    <View style={s.nameRow}>
+      <TextInput
+        style={[s.textInput, { flex: 1 }]}
+        value={firstName}
+        onChangeText={onFirstNameChange}
+        placeholder="First name"
+        placeholderTextColor={Colors.grey300}
+      />
+      <TextInput
+        style={[s.textInput, { flex: 1 }]}
+        value={lastName}
+        onChangeText={onLastNameChange}
+        placeholder="Last name"
+        placeholderTextColor={Colors.grey300}
+      />
+    </View>
+  );
+}
+
+function CityField({
+  selectedCity,
+  onPress,
+}: {
+  selectedCity: City | null;
+  onPress: () => void;
+}) {
+  return (
+    <>
+      <Text style={[TextStyles.label, s.sectionLabel]}>City</Text>
+      <TouchableOpacity
+        style={s.citySelector}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={selectedCity ? s.citySelectorText : s.citySelectorPlaceholder}
         >
-          <Animated.Image
-            source={{ uri }}
-            style={[{ width, height }, animatedStyle]}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      </GestureDetector>
-    </GestureHandlerRootView>
+          {selectedCity?.name ?? "Select city"}
+        </Text>
+        <Feather name="chevron-down" size={14} color={Colors.grey500} />
+      </TouchableOpacity>
+    </>
+  );
+}
+
+function SkillsEditGrid({
+  skills,
+  selected,
+  onToggle,
+}: {
+  skills: Skill[];
+  selected: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <View style={s.skillsGrid}>
+      {skills.map((skill) => {
+        const active = selected.includes(skill.id);
+        return (
+          <TouchableOpacity
+            key={skill.id}
+            style={[s.skillTile, active && s.skillTileActive]}
+            onPress={() => onToggle(skill.id)}
+            activeOpacity={0.8}
+          >
+            <Text style={s.skillTileIcon}>{skill.icon}</Text>
+            <Text style={[s.skillTileName, active && s.skillTileNameActive]}>
+              {skill.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function SkillsViewSection({
+  label,
+  skillObjects,
+  emptyText,
+}: {
+  label: string;
+  skillObjects: Skill[];
+  emptyText: string;
+}) {
+  return (
+    <View style={s.section}>
+      <Text style={[TextStyles.label, s.sectionLabel]}>{label}</Text>
+      {skillObjects.length > 0 ? (
+        <SkillPills skills={skillObjects.map((skill) => skill.name)} />
+      ) : (
+        <Text style={s.emptyFieldText}>{emptyText}</Text>
+      )}
+    </View>
+  );
+}
+
+function BioViewSection({
+  label,
+  bio,
+  emptyText,
+}: {
+  label: string;
+  bio: string;
+  emptyText: string;
+}) {
+  return (
+    <View style={s.section}>
+      <Text style={[TextStyles.label, s.sectionLabel]}>{label}</Text>
+      {bio ? (
+        <Text style={s.bioText}>{bio}</Text>
+      ) : (
+        <Text style={s.emptyFieldText}>{emptyText}</Text>
+      )}
+    </View>
   );
 }
 
@@ -204,7 +211,9 @@ export default function ProfileScreen() {
   const [portfolioUrls, setPortfolioUrls] = useState<string[]>([]);
 
   // Original values for cancel
-  const [originalData, setOriginalData] = useState<any>(null);
+  const [originalData, setOriginalData] = useState<OriginalProfileData | null>(
+    null,
+  );
 
   // Lookup data
   const [cities, setCities] = useState<City[]>([]);
@@ -214,7 +223,7 @@ export default function ProfileScreen() {
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
 
   // Reviews
-  const [myReviews, setMyReviews] = useState<any[]>([]);
+  const [myReviews, setMyReviews] = useState<Review[]>([]);
   const [showMyReviewsSheet, setShowMyReviewsSheet] = useState(false);
 
   // Lightbox
@@ -305,7 +314,7 @@ export default function ProfileScreen() {
 
   const fetchMyReviews = async () => {
     if (!user) return;
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("reviews")
       .select(
         `
@@ -326,8 +335,7 @@ export default function ProfileScreen() {
       )
       .eq("freelancer_id", user.id)
       .order("created_at", { ascending: false });
-    console.log("My reviews:", data?.length, error?.message);
-    if (data) setMyReviews(data as any);
+    if (data) setMyReviews(data as unknown as Review[]);
   };
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -349,7 +357,7 @@ export default function ProfileScreen() {
     setCityId(originalData.cid);
     setBio(originalData.b);
     setSelectedSkills(originalData.sk);
-    if (profile?.role !== "client") setPortfolioUrls(originalData.pu);
+    if (profile?.role !== "client") setPortfolioUrls(originalData.pu ?? []);
     setPhotoChanged(false);
     setIsEditing(false);
   };
@@ -516,12 +524,7 @@ export default function ProfileScreen() {
   if (loading) return <LoadingScreen />;
 
   // ── Derived: member since ────────────────────────────────────────────────
-  const memberSince = userCreatedAt
-    ? new Date(userCreatedAt).toLocaleDateString("en-IN", {
-        month: "long",
-        year: "numeric",
-      })
-    : null;
+  const memberSince = formatMemberSince(userCreatedAt);
 
   // ── Client content ────────────────────────────────────────────────────────
   const clientContent = isEditing ? (
@@ -546,39 +549,18 @@ export default function ProfileScreen() {
         </View>
 
         {/* Name */}
-        <View style={s.nameRow}>
-          <TextInput
-            style={[s.textInput, { flex: 1 }]}
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholder="First name"
-            placeholderTextColor={Colors.grey300}
-          />
-          <TextInput
-            style={[s.textInput, { flex: 1 }]}
-            value={lastName}
-            onChangeText={setLastName}
-            placeholder="Last name"
-            placeholderTextColor={Colors.grey300}
-          />
-        </View>
+        <NameFields
+          firstName={firstName}
+          lastName={lastName}
+          onFirstNameChange={setFirstName}
+          onLastNameChange={setLastName}
+        />
 
         {/* City */}
-        <Text style={[TextStyles.label, s.sectionLabel]}>City</Text>
-        <TouchableOpacity
-          style={s.citySelector}
+        <CityField
+          selectedCity={selectedCity}
           onPress={() => setShowCitySheet(true)}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={
-              selectedCity ? s.citySelectorText : s.citySelectorPlaceholder
-            }
-          >
-            {selectedCity?.name ?? "Select city"}
-          </Text>
-          <Feather name="chevron-down" size={14} color={Colors.grey500} />
-        </TouchableOpacity>
+        />
 
         {/* Bio */}
         <Text style={[TextStyles.label, s.sectionLabel]}>ABOUT</Text>
@@ -603,26 +585,11 @@ export default function ProfileScreen() {
         <Text style={s.skillsSubtitle}>
           Select skills you frequently look for
         </Text>
-        <View style={s.skillsGrid}>
-          {skills.map((skill) => {
-            const active = selectedSkills.includes(skill.id);
-            return (
-              <TouchableOpacity
-                key={skill.id}
-                style={[s.skillTile, active && s.skillTileActive]}
-                onPress={() => toggleSkill(skill.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.skillTileIcon}>{skill.icon}</Text>
-                <Text
-                  style={[s.skillTileName, active && s.skillTileNameActive]}
-                >
-                  {skill.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <SkillsEditGrid
+          skills={skills}
+          selected={selectedSkills}
+          onToggle={toggleSkill}
+        />
 
         <View style={{ height: Spacing.huge }} />
       </ScrollView>
@@ -649,34 +616,18 @@ export default function ProfileScreen() {
       <Divider />
 
       {/* About */}
-      <View style={s.section}>
-        <Text style={[TextStyles.label, s.sectionLabel]}>ABOUT</Text>
-        {bio ? (
-          <Text style={s.bioText}>{bio}</Text>
-        ) : (
-          <Text style={s.emptyFieldText}>
-            Add a bio to tell freelancers about yourself
-          </Text>
-        )}
-      </View>
+      <BioViewSection
+        label="ABOUT"
+        bio={bio}
+        emptyText="Add a bio to tell freelancers about yourself"
+      />
 
       {/* Looking for */}
-      <View style={s.section}>
-        <Text style={[TextStyles.label, s.sectionLabel]}>LOOKING FOR</Text>
-        {skillObjects.length > 0 ? (
-          <View style={s.skillPills}>
-            {skillObjects.map((skill) => (
-              <View key={skill.id} style={s.skillPill}>
-                <Text style={s.skillPillText}>{skill.name}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={s.emptyFieldText}>
-            Add the skills you frequently need
-          </Text>
-        )}
-      </View>
+      <SkillsViewSection
+        label="LOOKING FOR"
+        skillObjects={skillObjects}
+        emptyText="Add the skills you frequently need"
+      />
 
       <View style={{ height: Spacing.huge }} />
     </ScrollView>
@@ -726,63 +677,27 @@ export default function ProfileScreen() {
         </View>
 
         {/* Name */}
-        <View style={s.nameRow}>
-          <TextInput
-            style={[s.textInput, { flex: 1 }]}
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholder="First name"
-            placeholderTextColor={Colors.grey300}
-          />
-          <TextInput
-            style={[s.textInput, { flex: 1 }]}
-            value={lastName}
-            onChangeText={setLastName}
-            placeholder="Last name"
-            placeholderTextColor={Colors.grey300}
-          />
-        </View>
+        <NameFields
+          firstName={firstName}
+          lastName={lastName}
+          onFirstNameChange={setFirstName}
+          onLastNameChange={setLastName}
+        />
 
         {/* City */}
-        <Text style={[TextStyles.label, s.sectionLabel]}>City</Text>
-        <TouchableOpacity
-          style={s.citySelector}
+        <CityField
+          selectedCity={selectedCity}
           onPress={() => setShowCitySheet(true)}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={
-              selectedCity ? s.citySelectorText : s.citySelectorPlaceholder
-            }
-          >
-            {selectedCity?.name ?? "Select city"}
-          </Text>
-          <Feather name="chevron-down" size={14} color={Colors.grey500} />
-        </TouchableOpacity>
+        />
 
         {/* Skills */}
         <Text style={[TextStyles.label, s.sectionLabel]}>Skills</Text>
         <Text style={s.skillsSubtitle}>Select all that apply</Text>
-        <View style={s.skillsGrid}>
-          {skills.map((skill) => {
-            const active = selectedSkills.includes(skill.id);
-            return (
-              <TouchableOpacity
-                key={skill.id}
-                style={[s.skillTile, active && s.skillTileActive]}
-                onPress={() => toggleSkill(skill.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.skillTileIcon}>{skill.icon}</Text>
-                <Text
-                  style={[s.skillTileName, active && s.skillTileNameActive]}
-                >
-                  {skill.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <SkillsEditGrid
+          skills={skills}
+          selected={selectedSkills}
+          onToggle={toggleSkill}
+        />
 
         {/* Bio */}
         <Text style={[TextStyles.label, s.sectionLabel]}>Bio</Text>
@@ -802,33 +717,15 @@ export default function ProfileScreen() {
 
         {/* Portfolio */}
         <Text style={[TextStyles.label, s.sectionLabel]}>Portfolio</Text>
-        <View style={s.portfolioGrid}>
-          {portfolioUrls.map((url, i) => (
-            <View key={i} style={s.portfolioCell}>
-              <Image source={{ uri: url }} style={s.portfolioImage} />
-              <TouchableOpacity
-                style={s.removeBtn}
-                onPress={() => handleRemovePortfolioImage(i)}
-              >
-                <Feather name="x" size={12} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
-          ))}
-          {portfolioUrls.length < 9 && (
-            <TouchableOpacity
-              style={s.addCell}
-              onPress={handleAddPortfolioImage}
-              activeOpacity={0.7}
-              disabled={uploadingPortfolio}
-            >
-              {uploadingPortfolio ? (
-                <ActivityIndicator color={Colors.grey400} />
-              ) : (
-                <Feather name="plus" size={24} color={Colors.grey400} />
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+        <PortfolioGrid
+          urls={portfolioUrls}
+          cellSize={GRID_SIZE}
+          editable
+          onRemove={handleRemovePortfolioImage}
+          onAdd={handleAddPortfolioImage}
+          maxCount={9}
+          uploading={uploadingPortfolio}
+        />
 
         <View style={{ height: Spacing.huge }} />
       </ScrollView>
@@ -849,32 +746,18 @@ export default function ProfileScreen() {
       <Divider />
 
       {/* About */}
-      <View style={s.section}>
-        <Text style={[TextStyles.label, s.sectionLabel]}>About</Text>
-        {bio ? (
-          <Text style={s.bioText}>{bio}</Text>
-        ) : (
-          <Text style={s.emptyFieldText}>
-            Add a bio to tell clients about yourself
-          </Text>
-        )}
-      </View>
+      <BioViewSection
+        label="About"
+        bio={bio}
+        emptyText="Add a bio to tell clients about yourself"
+      />
 
       {/* Skills */}
-      <View style={s.section}>
-        <Text style={[TextStyles.label, s.sectionLabel]}>Skills</Text>
-        {skillObjects.length > 0 ? (
-          <View style={s.skillPills}>
-            {skillObjects.map((skill) => (
-              <View key={skill.id} style={s.skillPill}>
-                <Text style={s.skillPillText}>{skill.name}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text style={s.emptyFieldText}>Add your skills</Text>
-        )}
-      </View>
+      <SkillsViewSection
+        label="Skills"
+        skillObjects={skillObjects}
+        emptyText="Add your skills"
+      />
 
       {/* Reviews section */}
       {myReviews.length > 0 ? (
@@ -889,29 +772,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Vibe summary */}
-          <View style={s.vibeSummaryRow}>
-            {(() => {
-              const counts: Record<string, number> = {};
-              myReviews.forEach((r) => {
-                (r.vibes ?? []).forEach((v: string) => {
-                  counts[v] = (counts[v] ?? 0) + 1;
-                });
-              });
-              return Object.entries(counts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([vibeId, count]) => {
-                  const vibe = VIBES.find((v) => v.id === vibeId);
-                  if (!vibe) return null;
-                  return (
-                    <View key={vibeId} style={s.vibePill}>
-                      <Text style={s.vibePillEmoji}>{vibe.emoji}</Text>
-                      <Text style={s.vibePillLabel}>{vibe.label}</Text>
-                      <Text style={s.vibePillCount}>×{count}</Text>
-                    </View>
-                  );
-                });
-            })()}
-          </View>
+          <VibeSummaryPills reviews={myReviews} />
 
           <TouchableOpacity
             style={s.seeAllBtn}
@@ -954,7 +815,7 @@ export default function ProfileScreen() {
               <View
                 style={[
                   s.progressFill,
-                  { width: `${completion.percentage}%` as any },
+                  { width: `${completion.percentage}%` as const },
                 ]}
               />
             </View>
@@ -993,21 +854,14 @@ export default function ProfileScreen() {
         <Text style={[TextStyles.label, s.sectionLabel]}>Portfolio</Text>
         {portfolioUrls.length > 0 ? (
           <View style={s.portfolioViewWrap}>
-            <View style={s.portfolioGrid}>
-              {portfolioUrls.map((url, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={s.portfolioCell}
-                  onPress={() => {
-                    setLightboxIndex(i);
-                    setLightboxVisible(true);
-                  }}
-                  activeOpacity={0.9}
-                >
-                  <Image source={{ uri: url }} style={s.portfolioImage} />
-                </TouchableOpacity>
-              ))}
-            </View>
+            <PortfolioGrid
+              urls={portfolioUrls}
+              cellSize={GRID_SIZE}
+              onPressImage={(i) => {
+                setLightboxIndex(i);
+                setLightboxVisible(true);
+              }}
+            />
           </View>
         ) : (
           <EmptyState
@@ -1183,17 +1037,17 @@ export default function ProfileScreen() {
                   <View style={s.reviewItem}>
                     <View style={s.reviewClientRow}>
                       <Avatar
-                        uri={(review as any).users?.avatar_url}
-                        name={(review as any).users?.name}
+                        uri={review.users?.avatar_url}
+                        name={review.users?.name}
                         size="sm"
                       />
                       <View style={s.reviewClientInfo}>
                         <Text style={s.reviewClientName}>
-                          {(review as any).users?.name ?? "Client"}
+                          {review.users?.name ?? "Client"}
                         </Text>
                         <Text style={s.reviewClientMeta}>
-                          {(review as any).users?.cities?.name ?? ""}
-                          {(review as any).users?.cities?.name ? " · " : ""}
+                          {review.users?.cities?.name ?? ""}
+                          {review.users?.cities?.name ? " · " : ""}
                           {new Date(review.created_at).toLocaleDateString(
                             "en-IN",
                             { day: "numeric", month: "short", year: "numeric" },
@@ -1201,19 +1055,7 @@ export default function ProfileScreen() {
                         </Text>
                       </View>
                     </View>
-                    <View style={s.reviewVibesRow}>
-                      {(review.vibes ?? []).map((vibeId: string) => {
-                        const vibe = VIBES.find((v) => v.id === vibeId);
-                        if (!vibe) return null;
-                        return (
-                          <View key={vibeId} style={s.reviewVibePill}>
-                            <Text style={s.reviewVibePillText}>
-                              {vibe.emoji} {vibe.label}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
+                    <ReviewVibePills vibeIds={review.vibes} />
                     {review.note ? (
                       <Text style={s.reviewNoteText}>"{review.note}"</Text>
                     ) : null}
@@ -1228,55 +1070,13 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      <Modal
+      <PortfolioLightbox
         visible={lightboxVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightboxVisible(false)}
-        statusBarTranslucent
-      >
-        <View style={s.lightboxContainer}>
-          <View style={s.lightboxOverlay} />
-
-          <View style={s.lightboxCounter}>
-            <Text style={s.lightboxCounterText}>
-              {lightboxIndex + 1} / {portfolioUrls.length}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={s.lightboxClose}
-            onPress={() => setLightboxVisible(false)}
-            activeOpacity={0.7}
-          >
-            <Feather name="x" size={24} color={Colors.white} />
-          </TouchableOpacity>
-
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            contentOffset={{ x: lightboxIndex * SCREEN_WIDTH, y: 0 }}
-            onMomentumScrollEnd={(e) => {
-              const index = Math.round(
-                e.nativeEvent.contentOffset.x / SCREEN_WIDTH,
-              );
-              setLightboxIndex(index);
-            }}
-            style={s.lightboxScroll}
-          >
-            {portfolioUrls.map((url, i) => (
-              <LightboxImage
-                key={i}
-                uri={url}
-                width={SCREEN_WIDTH}
-                height={SCREEN_HEIGHT}
-              />
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
+        urls={portfolioUrls}
+        index={lightboxIndex}
+        onIndexChange={setLightboxIndex}
+        onClose={() => setLightboxVisible(false)}
+      />
     </>
   );
 }
@@ -1347,39 +1147,10 @@ const s = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // Skill pills (view mode)
-  skillPills: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
-  skillPill: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.border,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 5,
-  },
-  skillPillText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.black,
-  },
-
   // Portfolio grid (shared)
   portfolioViewWrap: {
     padding: Spacing.lg,
     marginHorizontal: -Spacing.lg,
-  },
-  portfolioGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 2,
-  },
-  portfolioCell: {
-    width: GRID_SIZE,
-    height: GRID_SIZE,
-    overflow: "hidden",
-  },
-  portfolioImage: {
-    width: "100%",
-    height: "100%",
   },
 
   // Edit mode — avatar section
@@ -1444,7 +1215,6 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.grey300,
   },
-  chevron: { width: 14 }, // kept as spacer placeholder
 
   // Edit mode — skills grid
   skillsSubtitle: {
@@ -1505,69 +1275,6 @@ const s = StyleSheet.create({
     marginTop: Spacing.xs,
   },
 
-  // Edit mode — portfolio remove/add
-  removeBtn: {
-    position: "absolute",
-    top: Spacing.xs,
-    right: Spacing.xs,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  removeBtnText: { fontSize: 10, color: Colors.white }, // unused — Feather icon used
-  addCell: {
-    width: GRID_SIZE,
-    height: GRID_SIZE,
-    backgroundColor: Colors.grey100,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addCellIcon: { fontSize: 24, color: Colors.grey400 }, // unused — Feather icon used
-
-  // Client view — info card
-  infoCard: {
-    overflow: "hidden",
-    padding: 0,
-    marginHorizontal: Layout.screenPadding,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.xxxl,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.grey100,
-  },
-  infoRowLast: { borderBottomWidth: 0 },
-  infoLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.grey500,
-  },
-  infoValue: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.md,
-    color: Colors.black,
-  },
-
-  // Sign out (client view only)
-  signOutRow: {
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  signOutText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.base,
-    color: Colors.danger,
-  },
-
   // 3-dots menu
   menuBtn: {
     width: 36,
@@ -1586,7 +1293,7 @@ const s = StyleSheet.create({
   },
   dropdown: {
     position: "absolute",
-    top: 52, // height of header row
+    top: Layout.headerHeight,
     right: Spacing.xl,
     backgroundColor: Colors.white,
     borderRadius: Radius.md,
@@ -1655,11 +1362,6 @@ const s = StyleSheet.create({
     color: Colors.black,
   },
   cityNameSelected: { fontFamily: FontFamily.medium },
-  cityCheck: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.md,
-    color: Colors.green,
-  },
   completionWrap: {
     marginHorizontal: Spacing.xl,
     marginTop: Spacing.xl,
@@ -1734,32 +1436,6 @@ const s = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.grey500,
   },
-  vibeSummaryRow: {
-    flexDirection: "row" as const,
-    flexWrap: "wrap" as const,
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  vibePill: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: Spacing.xs,
-    backgroundColor: Colors.grey100,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 1,
-  },
-  vibePillEmoji: { fontSize: 14 },
-  vibePillLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: Colors.grey700,
-  },
-  vibePillCount: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.xs,
-    color: Colors.grey500,
-  },
   seeAllBtn: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
@@ -1801,7 +1477,7 @@ const s = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
-    maxHeight: "80%" as any,
+    maxHeight: "80%" as const,
     paddingTop: Spacing.md,
   },
   reviewSheetHandle: {
@@ -1853,22 +1529,6 @@ const s = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.grey400,
   },
-  reviewVibesRow: {
-    flexDirection: "row" as const,
-    flexWrap: "wrap" as const,
-    gap: Spacing.xs,
-  },
-  reviewVibePill: {
-    backgroundColor: Colors.grey100,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-  },
-  reviewVibePillText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: Colors.grey700,
-  },
   reviewNoteText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
@@ -1879,47 +1539,5 @@ const s = StyleSheet.create({
   reviewDivider: {
     height: 0.5,
     backgroundColor: Colors.border,
-  },
-
-  // Lightbox
-  lightboxContainer: {
-    flex: 1,
-    backgroundColor: Colors.overlayDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  lightboxOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.overlayDark,
-  },
-  lightboxCounter: {
-    position: "absolute",
-    top: 56,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 10,
-  },
-  lightboxCounterText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.sm,
-    color: Colors.white,
-    opacity: 0.8,
-  },
-  lightboxClose: {
-    position: "absolute",
-    top: 52,
-    right: Spacing.xl,
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: Radius.full,
-  },
-  lightboxScroll: {
-    flex: 1,
-    width: SCREEN_WIDTH,
   },
 });

@@ -2,6 +2,7 @@ import { TextInput, View, Text, StyleSheet, TextInputProps } from 'react-native'
 import { Colors } from '../../constants/Colors'
 import { FontFamily, FontSize } from '../../constants/Typography'
 import { Radius, Spacing } from '../../constants/Spacing'
+import { Layout } from '../../constants/Layout'
 
 type InputProps = TextInputProps & {
   label?: string
@@ -46,7 +47,7 @@ const s = StyleSheet.create({
   wrapper: { gap: Spacing.xs },
   label: { fontFamily: FontFamily.medium, fontSize: FontSize.sm, color: Colors.grey500, textTransform: 'uppercase', letterSpacing: 0.6 },
   required: { color: Colors.danger },
-  inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, height: 48, backgroundColor: Colors.white },
+  inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, height: Layout.inputHeight, backgroundColor: Colors.white },
   inputError: { borderColor: Colors.danger },
   prefix: { fontFamily: FontFamily.medium, fontSize: FontSize.base, color: Colors.black, marginRight: Spacing.sm },
   input: { flex: 1, fontFamily: FontFamily.regular, fontSize: FontSize.base, color: Colors.black },

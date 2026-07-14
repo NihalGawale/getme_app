@@ -2,6 +2,7 @@ import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle } from
 import { Colors } from '../../constants/Colors'
 import { FontFamily, FontSize } from '../../constants/Typography'
 import { Radius, Spacing } from '../../constants/Spacing'
+import { Layout } from '../../constants/Layout'
 
 type ButtonProps = {
   label: string
@@ -56,7 +57,7 @@ export default function Button({
 
 const s = StyleSheet.create({
   base: {
-    height: 52,
+    height: Layout.buttonHeight,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',

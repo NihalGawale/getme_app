@@ -12,15 +12,6 @@ import { AuthProvider } from "../context/AuthContext";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import { supabase } from "../lib/supabase";
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 import Constants from "expo-constants";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -40,21 +31,18 @@ Notifications.setNotificationHandler({
 });
 export default function RootLayout() {
   const router = useRouter();
-  const notificationListener = useRef<any>(null);
-  const responseListener = useRef<any>(null);
+  const notificationListener = useRef<Notifications.Subscription | null>(null);
+  const responseListener = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
     // Listen for notifications received while app is open
     notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("Notification received:", notification);
-      });
+      Notifications.addNotificationReceivedListener(() => {});
 
     // Listen for notification taps
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data;
-        console.log("Notification tapped — data:", data);
 
         // Navigate to specific chat
         if (data?.conversation_id) {

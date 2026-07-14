@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
-  Modal,
   Image,
   RefreshControl,
   Animated,
@@ -22,11 +21,10 @@ import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
 import EmptyState from "../../components/ui/EmptyState";
-import LoadingScreen from "../../components/ui/LoadingScreen";
+import CityPickerModal from "../../components/CityPickerModal";
+import type { City } from "../../types/city";
 import { Feather } from "@expo/vector-icons";
-import { posthog } from "../../lib/posthog";
 
-type City = { id: string; name: string; state: string };
 type Skill = { id: string; name: string; icon: string };
 type Freelancer = {
   id: string;
@@ -50,6 +48,45 @@ type Freelancer = {
 
 const CARD_IMAGE_WIDTH = Layout.screenWidth - Layout.screenPadding * 2;
 
+function SkeletonCard() {
+  const opacity = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.4,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View style={[sk.card, { opacity }]}>
+      <View style={sk.header}>
+        <View style={sk.avatar} />
+        <View style={sk.info}>
+          <View style={sk.nameLine} />
+          <View style={sk.subLine} />
+        </View>
+      </View>
+      <View style={sk.tagsRow}>
+        <View style={sk.tag} />
+        <View style={sk.tag} />
+        <View style={sk.tag} />
+      </View>
+      <View style={sk.image} />
+    </Animated.View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useAuth();
@@ -61,7 +98,6 @@ export default function HomeScreen() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showCityModal, setShowCityModal] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeIndex, setActiveIndex] = useState<Record<string, number>>({});
@@ -162,14 +198,12 @@ export default function HomeScreen() {
         vibe_count: 0,
       }));
 
-      // Fetch review counts BEFORE setting state
-      // Single batch query for all freelancers
+      // Single batch query for all freelancers' reviews
       const freelancerIds = enriched.map((f) => f.user_id);
-      console.log("Fetching reviews for IDs:", JSON.stringify(freelancerIds));
 
-      const { data: reviewData, error: reviewError } = await supabase
+      const { data: reviewData } = await supabase
         .from("reviews")
-        .select("freelancer_id, vibes, note")
+        .select("freelancer_id, vibes")
         .in("freelancer_id", freelancerIds);
 
       const reviewCounts: Record<string, number> = {};
@@ -177,53 +211,19 @@ export default function HomeScreen() {
 
       if (reviewData) {
         reviewData.forEach((r: any) => {
-          // Count reviews that have a note
-          if (r.note) {
-            reviewCounts[r.freelancer_id] =
-              (reviewCounts[r.freelancer_id] ?? 0) + 1;
-          }
-          // Count total vibes
+          reviewCounts[r.freelancer_id] = (reviewCounts[r.freelancer_id] ?? 0) + 1;
           (r.vibes ?? []).forEach(() => {
-            vibeCounts[r.freelancer_id] =
-              (vibeCounts[r.freelancer_id] ?? 0) + 1;
+            vibeCounts[r.freelancer_id] = (vibeCounts[r.freelancer_id] ?? 0) + 1;
           });
         });
       }
 
-      console.log("Review counts:", JSON.stringify(reviewCounts));
-      console.log("Vibe counts:", JSON.stringify(vibeCounts));
-      console.log("Review error:", reviewError?.message);
-
-      // Build counts map
-      const counts: Record<string, number> = {};
-      if (reviewData) {
-        reviewData.forEach((r: any) => {
-          counts[r.freelancer_id] = (counts[r.freelancer_id] ?? 0) + 1;
-        });
-      }
-
-      console.log("Final counts:", JSON.stringify(counts));
-
-      // Merge counts into enriched BEFORE calling setFreelancers
       const enrichedWithReviews = enriched.map((f) => ({
         ...f,
-        review_count: counts[f.user_id] ?? 0,
+        review_count: reviewCounts[f.user_id] ?? 0,
         vibe_count: vibeCounts[f.user_id] ?? 0,
       }));
 
-      console.log(
-        "Enriched with reviews:",
-        JSON.stringify(
-          enrichedWithReviews.map((f) => ({
-            name: f.users?.name,
-            user_id: f.user_id,
-            review_count: f.review_count,
-            vibe_count: f.vibe_count,
-          })),
-        ),
-      );
-
-      // Single setFreelancers call — no race condition
       setFreelancers(enrichedWithReviews);
     } catch (e) {
       console.log("Network error:", e);
@@ -237,58 +237,17 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [selectedCity, selectedSkill]);
 
-  const filtered = freelancers.filter((f) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase().trim();
-    const nameMatch = f.users?.name?.toLowerCase().includes(q);
-    const skillMatch = f.skill_names?.some((s) => s.toLowerCase().includes(q));
-    return nameMatch || skillMatch;
-  });
-
-  const filteredCities = useMemo(() => {
-    const query = citySearch.trim().toLowerCase();
-    if (!query) return cities;
-    return cities.filter((city) => city.name.toLowerCase().startsWith(query));
-  }, [cities, citySearch]);
-
-  function SkeletonCard() {
-    const opacity = useRef(new Animated.Value(0.4)).current;
-
-    useEffect(() => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(opacity, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0.4,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start();
-    }, []);
-
-    return (
-      <Animated.View style={[sk.card, { opacity }]}>
-        <View style={sk.header}>
-          <View style={sk.avatar} />
-          <View style={sk.info}>
-            <View style={sk.nameLine} />
-            <View style={sk.subLine} />
-          </View>
-        </View>
-        <View style={sk.tagsRow}>
-          <View style={sk.tag} />
-          <View style={sk.tag} />
-          <View style={sk.tag} />
-        </View>
-        <View style={sk.image} />
-      </Animated.View>
-    );
-  }
+  const filtered = useMemo(() => {
+    return freelancers.filter((f) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase().trim();
+      const nameMatch = f.users?.name?.toLowerCase().includes(q);
+      const skillMatch = f.skill_names?.some((s) =>
+        s.toLowerCase().includes(q),
+      );
+      return nameMatch || skillMatch;
+    });
+  }, [freelancers, search]);
 
   if (loading) {
     return (
@@ -324,10 +283,7 @@ export default function HomeScreen() {
         </Text>
         <TouchableOpacity
           style={s.cityPill}
-          onPress={() => {
-            setCitySearch("");
-            setShowCityModal(true);
-          }}
+          onPress={() => setShowCityModal(true)}
           activeOpacity={0.8}
         >
           <Text style={s.cityPillDot}>●</Text>
@@ -575,99 +531,16 @@ export default function HomeScreen() {
         )}
       />
 
-      {/* City searchable modal */}
-      <Modal
+      <CityPickerModal
         visible={showCityModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCityModal(false)}
-      >
-        <View style={s.cityModalContainer}>
-          <View style={s.cityModalCard}>
-            {/* Header */}
-            <View style={s.cityModalHeader}>
-              <Text style={s.cityModalTitle}>Select city</Text>
-              <TouchableOpacity
-                onPress={() => setShowCityModal(false)}
-                activeOpacity={0.7}
-                style={s.cityModalClose}
-              >
-                <Feather name="x" size={20} color={Colors.black} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Search input */}
-            <View style={s.citySearchWrap}>
-              <Feather
-                name="search"
-                size={16}
-                color={Colors.grey400}
-                style={s.citySearchIcon}
-              />
-              <TextInput
-                style={s.citySearchInput}
-                placeholder="Search city or state..."
-                placeholderTextColor={Colors.grey300}
-                value={citySearch}
-                onChangeText={setCitySearch}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus={true}
-              />
-              {citySearch.length > 0 && (
-                <TouchableOpacity onPress={() => setCitySearch("")}>
-                  <Feather name="x-circle" size={16} color={Colors.grey400} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* City list */}
-            <FlatList
-              data={filteredCities}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={s.cityList}
-              ListEmptyComponent={
-                <View style={s.cityEmptyWrap}>
-                  <Text style={s.cityEmptyText}>
-                    No cities found for "{citySearch}"
-                  </Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    s.cityItem,
-                    selectedCity?.id === item.id && s.cityItemSelected,
-                  ]}
-                  onPress={() => {
-                    setSelectedCity(item);
-                    setShowCityModal(false);
-                    setCitySearch("");
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.cityItemLeft}>
-                    <Text
-                      style={[
-                        s.cityItemName,
-                        selectedCity?.id === item.id && s.cityItemNameSelected,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text style={s.cityItemState}>{item.state}</Text>
-                  </View>
-                  {selectedCity?.id === item.id && (
-                    <Feather name="check" size={16} color={Colors.green} />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
+        cities={cities}
+        selectedCityId={selectedCity?.id}
+        onSelect={(city) => {
+          setSelectedCity(city);
+          setShowCityModal(false);
+        }}
+        onClose={() => setShowCityModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -708,7 +581,6 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: Colors.black,
   },
-  cityPillArrow: { width: 12 }, // unused — Feather icon used
 
   // Search
   searchWrap: {
@@ -724,14 +596,12 @@ const s = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
   },
-  searchIcon: { width: 16 }, // unused — Feather icon used
   searchInput: {
     flex: 1,
     fontFamily: FontFamily.regular,
     fontSize: FontSize.md,
     color: Colors.black,
   },
-  searchClear: { padding: 2 }, // unused — Feather icon used
 
   // Skills
   skillsScroll: {
@@ -930,103 +800,6 @@ const s = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // City modal
-  cityModalContainer: {
-    flex: 1,
-    backgroundColor: Colors.overlay,
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
-    padding: Spacing.xl,
-  },
-  cityModalCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    width: "100%" as any,
-    maxHeight: "80%" as any,
-    overflow: "hidden" as const,
-  },
-  cityModalHeader: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-  },
-  cityModalTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.lg,
-    color: Colors.black,
-  },
-  cityModalClose: {
-    width: 32,
-    height: 32,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  citySearchWrap: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: Spacing.sm,
-    margin: Spacing.lg,
-    backgroundColor: Colors.grey100,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    height: 44,
-  },
-  citySearchIcon: {
-    flexShrink: 0,
-  },
-  citySearchInput: {
-    flex: 1,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    color: Colors.black,
-    height: 44,
-  },
-  cityList: {
-    maxHeight: 400,
-  },
-  cityItem: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.grey100,
-  },
-  cityItemSelected: {
-    backgroundColor: Colors.greenLight,
-  },
-  cityItemLeft: {
-    gap: 2,
-  },
-  cityItemName: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.base,
-    color: Colors.black,
-  },
-  cityItemNameSelected: {
-    fontFamily: FontFamily.medium,
-    color: Colors.greenDark,
-  },
-  cityItemState: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.xs,
-    color: Colors.grey400,
-  },
-  cityEmptyWrap: {
-    padding: Spacing.xxxl,
-    alignItems: "center" as const,
-  },
-  cityEmptyText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.grey400,
-    textAlign: "center" as const,
-  },
 });
 
 const sk = StyleSheet.create({

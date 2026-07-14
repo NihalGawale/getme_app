@@ -9,15 +9,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState, useCallback } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
+import { getUnreadCount } from "../../lib/conversations";
 import { useAuth } from "../../context/AuthContext";
 import { Colors } from "../../constants/Colors";
 import { FontFamily, FontSize } from "../../constants/Typography";
-import { Spacing, Radius } from "../../constants/Spacing";
+import { Spacing } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
-import EmptyState from "../../components/ui/EmptyState";
 import LoadingScreen from "../../components/ui/LoadingScreen";
-import FeatherIcon from "../../components/ui/FeatherIcon";
+import EmptyState from "../../components/ui/EmptyState";
 
 type Conversation = {
   id: string;
@@ -38,11 +38,11 @@ export default function MessagesScreen() {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       if (user?.id) {
-        console.log("Messages tab focused - refetching conversations");
         fetchConversations();
       }
     }, [user?.id]),
@@ -95,14 +95,9 @@ export default function MessagesScreen() {
           .eq("conversation_id", convo.id)
           .order("created_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
-        const { count } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("conversation_id", convo.id)
-          .eq("is_read", false)
-          .neq("sender_id", user.id);
+        const unreadCount = await getUnreadCount([convo.id], user.id);
 
         return {
           ...convo,
@@ -112,7 +107,7 @@ export default function MessagesScreen() {
             avatar_url: null,
           },
           last_message: lastMsg?.content ?? null,
-          unread_count: count ?? 0,
+          unread_count: unreadCount,
         };
       }),
     );
@@ -120,6 +115,12 @@ export default function MessagesScreen() {
     setConversations(enriched);
     setLoading(false);
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchConversations();
+    setRefreshing(false);
+  }, [user?.id]);
 
   const subscribeToMessages = () => {
     const subscription = supabase
@@ -181,23 +182,17 @@ export default function MessagesScreen() {
           conversations.length === 0 ? s.emptyContainer : s.listContent
         }
         showsVerticalScrollIndicator={false}
-        onRefresh={fetchConversations}
-        refreshing={false}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
         ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyIcon}>💬</Text>
-            <Text style={s.emptyTitle}>No messages yet</Text>
-            <Text style={s.emptyText}>
-              Find a freelancer and start a conversation
-            </Text>
-            <TouchableOpacity
-              style={s.emptyBtn}
-              onPress={() => router.push("/(tabs)/")}
-              activeOpacity={0.85}
-            >
-              <Text style={s.emptyBtnText}>Browse freelancers →</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon="💬"
+            title="No messages yet"
+            subtitle="Find a freelancer and start a conversation"
+            actionLabel="Browse freelancers →"
+            onAction={() => router.push("/(tabs)/")}
+            buttonVariant="primary"
+          />
         }
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -267,43 +262,6 @@ const s = StyleSheet.create({
   },
   listContent: { paddingTop: Spacing.sm, paddingBottom: 100 },
   emptyContainer: { flex: 1 },
-  emptyWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 100,
-    gap: Spacing.sm,
-    paddingHorizontal: Layout.screenPadding,
-  },
-  emptyIcon: {
-    fontSize: 40,
-    marginBottom: Spacing.sm,
-  },
-  emptyTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.lg,
-    color: Colors.black,
-    textAlign: "center",
-  },
-  emptyText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.md,
-    color: Colors.grey500,
-    textAlign: "center",
-    lineHeight: FontSize.md * 1.6,
-  },
-  emptyBtn: {
-    marginTop: Spacing.lg,
-    backgroundColor: Colors.black,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xxl,
-  },
-  emptyBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.base,
-    color: Colors.white,
-  },
   convoRow: {
     flexDirection: "row",
     alignItems: "center",

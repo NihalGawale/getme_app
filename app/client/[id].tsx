@@ -16,6 +16,8 @@ import { Spacing, Radius } from "../../constants/Spacing";
 import Avatar from "../../components/ui/Avatar";
 import Divider from "../../components/ui/Divider";
 import LoadingScreen from "../../components/ui/LoadingScreen";
+import SkillPills from "../../components/SkillPills";
+import { formatMemberSince } from "../../lib/format";
 
 type ClientProfile = {
   id: string;
@@ -60,21 +62,16 @@ export default function ClientProfileScreen() {
       setSkillNames(skillsData?.map((s) => s.name) ?? []);
     }
 
-    setClientProfile(data as ClientProfile);
+    const cities = Array.isArray(data.cities)
+      ? (data.cities[0] ?? null)
+      : data.cities;
+    setClientProfile({ ...data, cities } as ClientProfile);
     setLoading(false);
   };
 
-  const memberSince = clientProfile?.created_at
-    ? new Date(clientProfile.created_at).toLocaleDateString("en-IN", {
-        month: "long",
-        year: "numeric",
-      })
-    : "";
+  const memberSince = formatMemberSince(clientProfile?.created_at) ?? "";
 
-  const cityName =
-    clientProfile?.cities && typeof clientProfile.cities === "object"
-      ? (clientProfile.cities as { name: string }).name
-      : null;
+  const cityName = clientProfile?.cities?.name ?? null;
 
   const hasBio = Boolean(clientProfile?.bio);
   const hasSkills = skillNames.length > 0;
@@ -128,13 +125,7 @@ export default function ClientProfileScreen() {
         {hasSkills && (
           <View style={s.section}>
             <Text style={[TextStyles.label, s.sectionLabel]}>LOOKING FOR</Text>
-            <View style={s.skillPills}>
-              {skillNames.map((name) => (
-                <View key={name} style={s.skillPill}>
-                  <Text style={s.skillPillText}>{name}</Text>
-                </View>
-              ))}
-            </View>
+            <SkillPills skills={skillNames} />
           </View>
         )}
 
@@ -212,21 +203,6 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.black,
     lineHeight: 22,
-  },
-
-  // Skill pills
-  skillPills: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm },
-  skillPill: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.border,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 5,
-  },
-  skillPillText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.sm,
-    color: Colors.black,
   },
 
   // Empty state

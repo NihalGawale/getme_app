@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native';
-import Colors from '../../constants/Colors';
+import { Colors } from '../../constants/Colors';
 import { Spacing, Radius } from '../../constants/Spacing';
 
 type StepIndicatorProps = {

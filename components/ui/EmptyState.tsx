@@ -10,6 +10,7 @@ type EmptyStateProps = {
   subtitle?: string
   actionLabel?: string
   onAction?: () => void
+  buttonVariant?: 'primary' | 'secondary' | 'ghost' | 'danger'
 }
 
 export default function EmptyState({
@@ -18,6 +19,7 @@ export default function EmptyState({
   subtitle,
   actionLabel,
   onAction,
+  buttonVariant = 'secondary',
 }: EmptyStateProps) {
   return (
     <View style={s.container}>
@@ -28,7 +30,7 @@ export default function EmptyState({
         <Button
           label={actionLabel}
           onPress={onAction}
-          variant="secondary"
+          variant={buttonVariant}
           style={s.action}
         />
       )}
