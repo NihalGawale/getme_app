@@ -44,6 +44,9 @@ type Freelancer = {
   skill_names: string[];
   review_count: number;
   vibe_count: number;
+  score: number;
+  is_new_user: boolean;
+  joined_days_ago: number;
 };
 
 const CARD_IMAGE_WIDTH = Layout.screenWidth - Layout.screenPadding * 2;
@@ -101,6 +104,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeIndex, setActiveIndex] = useState<Record<string, number>>({});
+  const newUserIndexRef = useRef(0);
 
   useEffect(() => {
     loadInitialData();
@@ -140,35 +144,11 @@ export default function HomeScreen() {
     if (!selectedCity) return;
 
     try {
-      let query = supabase
-        .from("freelancer_profiles")
-        .select(
-          `
-        id,
-        user_id,
-        bio,
-        skills,
-        portfolio_urls,
-        is_published,
-        whatsapp_number,
-        instagram_handle,
-        users!inner (
-          name,
-          avatar_url,
-          city_id,
-          cities (name)
-        )
-      `,
-        )
-        .eq("is_published", true)
-        .eq("users.city_id", selectedCity.id)
-        .order("created_at", { ascending: false });
-
-      if (selectedSkill) {
-        query = query.contains("skills", [selectedSkill]);
-      }
-
-      const { data, error } = await query;
+      const { data, error } = await supabase.rpc("get_ranked_freelancers", {
+        p_city_id: selectedCity.id,
+        p_skill_id: selectedSkill ?? null,
+        p_limit: 100,
+      });
 
       if (error) {
         console.log("Fetch error:", error.message);
@@ -186,45 +166,48 @@ export default function HomeScreen() {
         whatsapp_number: f.whatsapp_number as string | null,
         instagram_handle: f.instagram_handle as string | null,
         users: {
-          name: (f.users as any)?.name as string,
-          avatar_url: (f.users as any)?.avatar_url as string | null,
-          city_id: (f.users as any)?.city_id as string,
-          cities: { name: (f.users as any)?.cities?.name as string },
+          name: f.user_name as string,
+          avatar_url: f.user_avatar_url as string | null,
+          city_id: f.user_city_id as string,
+          cities: { name: f.city_name as string },
         },
         skill_names: ((f.skills as string[]) ?? [])
           .map((sid: string) => skills.find((s) => s.id === sid)?.name)
           .filter((name): name is string => Boolean(name)),
-        review_count: 0,
-        vibe_count: 0,
+        review_count: Number(f.review_count) ?? 0,
+        vibe_count: Number(f.vibe_count) ?? 0,
+        score: Number(f.score) ?? 0,
+        is_new_user: f.is_new_user as boolean,
+        joined_days_ago: f.joined_days_ago as number,
       }));
 
-      // Single batch query for all freelancers' reviews
-      const freelancerIds = enriched.map((f) => f.user_id);
+      // Separate ranked and new users
+      const ranked = enriched.filter((f) => !f.is_new_user);
+      const newUsers = enriched.filter((f) => f.is_new_user);
 
-      const { data: reviewData } = await supabase
-        .from("reviews")
-        .select("freelancer_id, vibes")
-        .in("freelancer_id", freelancerIds);
+      // Interleave new users into every 5th position
+      // using round-robin rotation across renders
+      const COLD_START_INTERVAL = 5;
+      const interleaved = [...ranked];
+      let newUserIndex = newUserIndexRef.current;
 
-      const reviewCounts: Record<string, number> = {};
-      const vibeCounts: Record<string, number> = {};
-
-      if (reviewData) {
-        reviewData.forEach((r: any) => {
-          reviewCounts[r.freelancer_id] = (reviewCounts[r.freelancer_id] ?? 0) + 1;
-          (r.vibes ?? []).forEach(() => {
-            vibeCounts[r.freelancer_id] = (vibeCounts[r.freelancer_id] ?? 0) + 1;
-          });
-        });
+      if (newUsers.length > 0) {
+        for (
+          let pos = COLD_START_INTERVAL - 1;
+          pos < interleaved.length + Math.ceil(interleaved.length / COLD_START_INTERVAL);
+          pos += COLD_START_INTERVAL
+        ) {
+          if (newUserIndex >= newUsers.length * 3) break;
+          const newUser = newUsers[newUserIndex % newUsers.length];
+          if (pos <= interleaved.length) {
+            interleaved.splice(pos, 0, newUser);
+          }
+          newUserIndex++;
+        }
+        newUserIndexRef.current = newUserIndex;
       }
 
-      const enrichedWithReviews = enriched.map((f) => ({
-        ...f,
-        review_count: reviewCounts[f.user_id] ?? 0,
-        vibe_count: vibeCounts[f.user_id] ?? 0,
-      }));
-
-      setFreelancers(enrichedWithReviews);
+      setFreelancers(interleaved);
     } catch (e) {
       console.log("Network error:", e);
       setFreelancers([]);

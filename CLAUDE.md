@@ -210,6 +210,7 @@ refreshProfile()// re-fetches profile row after edits
 | conversation_id | uuid (FK → conversations) |
 | reason | text |
 | details | text |
+| resolved_at | timestamptz |
 
 ### `blocks`
 | column | type |
@@ -237,14 +238,46 @@ Read receipts are marked via direct `.update({ is_read: true })` calls (chat scr
 
 ---
 
+## Recommendation Engine
+
+A three-layer recommendation system ranks the home feed. Layers 1 and 2 are built and live; Layer 3 is designed but not yet implemented.
+
+**Layer 1 — Quality ranking (main feed)**
+- Postgres function `calculate_freelancer_score(p_user_id uuid)` scores each freelancer 0–100 using Wilson confidence intervals on: Tier 2 vibe rate (×40), job completion rate (×30), written review rate (×15), Tier 1 vibe rate (×10), profile completeness (×5)
+- Report penalty activates only at 3+ reports **and** 5+ jobs
+- Recency multiplier: exponential decay with a 0.30 floor
+- New users get a base score floor of 25
+
+**Layer 2 — Cold-start slots**
+- Freelancers who joined < 30 days ago with 0 completed jobs are flagged `is_new_user` and given the score floor of 25 (mid-feed placement)
+- Client-side, they're interleaved into every 5th position of the ranked feed via round-robin rotation (`newUserIndexRef` in `app/(tabs)/index.tsx`)
+
+**Layer 3 — Paid placement (future, not yet built)**
+- Max 1 promoted slot per 8 organic results, clearly labelled "Featured"
+- Eligibility: 3+ jobs, complete profile, active within 60 days, report rate < 10%
+
+### New Postgres objects
+- `calculate_freelancer_score(p_user_id uuid)` — per-freelancer score, granted to `authenticated` and `anon`
+- `get_ranked_freelancers(p_city_id, p_skill_id, p_limit)` — single RPC that replaces the old two-query home screen fetch; returns pre-ranked results with all card data (including `review_count`, `vibe_count`, `score`, `is_new_user`, `joined_days_ago`) in one round trip, granted to `authenticated` and `anon`
+- Indexes: `idx_jobs_freelancer_id`, `idx_jobs_status`, `idx_jobs_freelancer_status`, `idx_reviews_freelancer_id`, `idx_reviews_created_at`, `idx_reports_reported_user_id`, `idx_freelancer_profiles_user_id`, `idx_freelancer_profiles_published`, `idx_users_city_id`
+
+### Home screen integration
+- `fetchFreelancers` (`app/(tabs)/index.tsx`) now calls `supabase.rpc('get_ranked_freelancers', ...)` instead of a direct `freelancer_profiles` query — one round trip instead of the previous query + separate reviews batch query
+- The `Freelancer` type is extended with `score: number`, `is_new_user: boolean`, `joined_days_ago: number`
+- `score` is never rendered in the UI — backend-only signal
+- Cards where `is_new_user === true` show a green "New" pill badge, top-right, absolute positioned
+
+---
+
 ## Key Screens
 
 ### Home / Discovery (`/(tabs)/index`)
-- FlatList of freelancer cards filtered by city and skill
+- FlatList of freelancer cards, ranked server-side by the [recommendation engine](#recommendation-engine) (`get_ranked_freelancers` RPC) and filtered by city and skill
 - Text search bar (client-side, searches name + skill names)
 - Horizontal scrollable skill-filter chips ("All" + each skill with emoji)
 - Results count header "Freelancers in {city} · {N} found"
 - Each card: avatar, name, review star count, city, vibe count (⚡), skill tags (max 4), portfolio image carousel (first 5 + "view all" sentinel), carousel dot indicators
+- Cards for newly-joined freelancers (`is_new_user`) show a green "New" pill badge, top-right
 - City picker: centered Modal with searchable input and `city.state` subtitle
 - Animated skeleton loading cards (opacity pulse) while fetching
 - Pull-to-refresh
@@ -371,6 +404,122 @@ overlayDark   rgba(0,0,0,0.97)
 
 ---
 
+## Copy / Microcopy (finalized decisions)
+
+### Role selection screen
+- Client card title: "I'm hiring" · subtext: "Looking to hire"
+- Freelancer card title: "I'm the talent you need" · subtext: "Looking for work"
+
+### Phone screen
+- Header: "Can we have your number?"
+- OTP button: "Send me OTP"
+- The "Your number is never shown on your public profile." reassurance line was removed — it created doubt rather than reassurance
+
+### Freelancer onboarding
+- Photo upload label: "Add a photo" · subtext: "Profiles with a photo get noticed more"
+- Bio placeholder: "The version you'd actually say out loud, not your LinkedIn summary"
+- Skills header: "What's your craft?"
+- City selector: "Where do you do your best work?"
+- Submit button: "I'm ready to be found"
+
+### Client onboarding
+- City selector: "Where are you located?"
+- Submit button: "Take me to GetMe"
+
+### Home screen
+- Empty state: "Nobody here yet — be the first to bring [skill] to [city]"
+- No results: "Nothing matched that — try a different skill or zoom out to the whole city"
+
+### Messages
+- Empty inbox: "Your inbox is quiet for now. Go find someone worth messaging."
+
+### Hire/job flow
+- Confirm modal: "Ready to make it official?"
+- Hire success: "And that's a hire."
+- Mark complete confirm: "Wrap this one up?"
+- Mark complete success: "Nice work. One more job done through GetMe."
+- Review prompt: "How'd it go? Your honest take helps the next person."
+
+### Profile
+- Zero reviews: "No reviews yet. Get out there and earn your first one."
+- Profile completion: "Almost there — a few more details and you're ready to be found."
+
+---
+
+## Business Model (finalized)
+
+### Freemium tiers (activate post 100K users)
+
+**Free (forever):** full hiring loop (search, message, hire, review), portfolio, skills, bio, reviews and vibes.
+
+**Pro — ₹149/month or ₹1,499/year:** everything in Free, plus who-viewed-your-profile, top candidates list placement, real-time lead alerts for tagged skills, active list of clients hiring for the same role, quick-reply templates, "Usually responds within X" badge.
+
+**Pro+ — ₹499/month or ₹4,999/year (anchor tier):** everything in Pro, plus competitive intel (who else was viewed for the same job), demand heatmap (trending skills/cities), monthly performance digest + city benchmarking, anonymized local rate/pricing insights, quality-gated priority placement boost, custom profile link (`getme.social/u/yourname`), Pro+ badge.
+
+### Pricing philosophy
+- Core hiring loop stays free forever — no paywall on search, message, hire, or get hired
+- Paid tiers monetize visibility and intelligence only, never the core loop
+- Pro+ exists primarily to make Pro look affordable (anchoring effect — 3.3x price gap)
+- Tiers activate only once GetMe has enough user density for features like "who viewed you" to be meaningful
+
+---
+
+## Financial Model (context)
+
+### Use of Funds (₹1.1 Cr, 15 months) — finalized
+| Category | Amount | % |
+|---|---|---|
+| Team | ₹63,00,000 | 57% |
+| Marketing & Content | ₹12,00,000 | 11% |
+| Tech & AI Tooling | ₹9,00,000 | 8% |
+| Equipment & Operations | ₹6,00,000 | 5% |
+| Office & Setup | ₹4,50,000 | 4% |
+| Legal & Compliance | ₹2,50,000 | 2% |
+| Buffer & Runway Reserve | ₹13,00,000 | 12% |
+
+Team breakdown: Founder ₹1,00,000/mo, Tech Lead ₹1,20,000/mo, Growth Lead ₹90,000/mo, Community Ops ₹55,000/mo, Designer ₹55,000/mo. Equipment & Operations includes laptops, travel, meals, merchandise, Google Workspace/Slack/Notion, and the Google Play fee.
+
+### Break-even analysis (at premium tier launch)
+- Annual operational cost (scaled Year 2–3 team): ~₹1.38 Cr
+- Target with 25% profit margin: ~₹1.73 Cr revenue
+- Revenue per converting freelancer/year (blended 80% Pro / 20% Pro+): ~₹2,628
+- Paying freelancers needed: ~6,585
+- At 3% conversion: ~219,500 active freelancers needed
+- Total platform users needed: ~880,000
+
+---
+
+## Claude Code Subagents
+
+Four specialist agents live in `.claude/agents/`:
+
+| Agent | Owns |
+|---|---|
+| `db-agent.md` | All SQL, schema, indexes, RLS policies, Supabase Edge Functions |
+| `query-agent.md` | All Supabase client queries, RPC calls, data mapping, TypeScript types |
+| `ui-agent.md` | All JSX, StyleSheet, component layout, text copy throughout the app |
+| `marketing-agent.md` | All social content, Instagram/X posts, brand copy, campaign concepts |
+
+`db-agent.md` is explicitly barred from writing or running `DELETE`/`TRUNCATE`/cascading-delete statements — destructive data operations are left to the user to run themselves.
+
+---
+
+## Admin Dashboard
+
+- `reports` table has a `resolved_at` column for tracking resolution
+- `jobs` and `conversations` both have an additional `SELECT USING (true)` RLS policy (alongside the participants-only policy) so the admin dashboard can read full counts
+
+---
+
+## Recent Fixes (since last update)
+
+- Custom skill insert was failing due to a missing RLS INSERT policy on `skills` — fixed with `CREATE POLICY "Authenticated users can add custom skills" ON skills FOR INSERT TO authenticated WITH CHECK (true)`
+- "Both" role option removed from role selection — it silently converted to freelancer with no real dual-role implementation
+- Removed the "Your number is never shown on your public profile" line from the phone screen (see [Copy / Microcopy](#copy--microcopy-finalized-decisions))
+- Fixed missing `splash.png` asset warning
+
+---
+
 ## Environment Variables
 
 ```
@@ -407,9 +556,21 @@ Cloudinary upload preset: `getme_profiles` (must exist in Cloudinary dashboard a
 
 **Job lifecycle** — Hire (client) → `jobs` INSERT + `conversations.job_confirmed = true` + confetti → Mark Complete (freelancer) → `jobs.status = "completed"` + `conversations.job_confirmed = false` + system messages → both parties can leave a review.
 
+**Freelancer ranking** — Home screen fetches freelancers via a single `get_ranked_freelancers` RPC (see [Recommendation Engine](#recommendation-engine)) instead of a direct table query. Results arrive pre-scored server-side; the client only interleaves cold-start (`is_new_user`) freelancers into every 5th slot via a round-robin `newUserIndexRef`. The score itself is never shown in the UI.
+
 **Tab icons** — Home tab uses Phosphor `HouseIcon`; Messages and Profile tabs use Ionicons (`chatbubbles-sharp`, `person-circle`). `FeatherIcon` UI component uses Feather but the tab bar does not.
 
 **Chat bubble color** — Sent messages use `Colors.green` background (not black). Received messages use grey.
+
+---
+
+## Current Status
+
+- MVP: complete and stable
+- TestFlight: pending Apple Developer account approval (enrollment submitted, awaiting processing)
+- EAS config: complete (`eas.json` preview profile, `app.json` with `bundleIdentifier social.getme.app`, `babel.config.js` with the reanimated plugin)
+- Synthetic seed data: 200 users were loaded for testing and have since been cleaned up
+- Recommendation engine: built and verified in Supabase; app integration (home screen RPC + cold-start interleaving) is in progress
 
 ---
 
