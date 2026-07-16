@@ -369,6 +369,11 @@ export default function HomeScreen() {
         nestedScrollEnabled={true}
         renderItem={({ item }) => (
           <View style={s.card}>
+            {item.is_new_user && (
+              <View style={s.newBadge}>
+                <Text style={s.newBadgeText}>New</Text>
+              </View>
+            )}
             {/* PART 1 — Tappable header */}
             <TouchableOpacity
               onPress={() => router.push(`/freelancer/${item.user_id}`)}
@@ -659,6 +664,7 @@ const s = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: Radius.lg,
     overflow: "hidden",
+    position: "relative",
   },
   cardHeader: {
     flexDirection: "row",
@@ -781,6 +787,23 @@ const s = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.grey300,
     fontStyle: "italic",
+  },
+
+  // New badge
+  newBadge: {
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    backgroundColor: Colors.green,
+    borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    zIndex: 10,
+  },
+  newBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.xs,
+    color: Colors.white,
   },
 
 });
