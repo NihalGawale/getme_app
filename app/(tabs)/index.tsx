@@ -50,6 +50,7 @@ type Freelancer = {
 };
 
 const CARD_IMAGE_WIDTH = Layout.screenWidth - Layout.screenPadding * 2;
+const COLD_START_INTERVAL = 5;
 
 function SkeletonCard() {
   const opacity = useRef(new Animated.Value(0.4)).current;
@@ -174,9 +175,9 @@ export default function HomeScreen() {
         skill_names: ((f.skills as string[]) ?? [])
           .map((sid: string) => skills.find((s) => s.id === sid)?.name)
           .filter((name): name is string => Boolean(name)),
-        review_count: Number(f.review_count) ?? 0,
-        vibe_count: Number(f.vibe_count) ?? 0,
-        score: Number(f.score) ?? 0,
+        review_count: Number(f.review_count ?? 0),
+        vibe_count: Number(f.vibe_count ?? 0),
+        score: Number(f.score ?? 0),
         is_new_user: f.is_new_user as boolean,
         joined_days_ago: f.joined_days_ago as number,
       }));
@@ -185,25 +186,32 @@ export default function HomeScreen() {
       const ranked = enriched.filter((f) => !f.is_new_user);
       const newUsers = enriched.filter((f) => f.is_new_user);
 
-      // Interleave new users into every 5th position
-      // using round-robin rotation across renders
-      const COLD_START_INTERVAL = 5;
-      const interleaved = [...ranked];
-      let newUserIndex = newUserIndexRef.current;
-
-      if (newUsers.length > 0) {
-        for (
-          let pos = COLD_START_INTERVAL - 1;
-          pos < interleaved.length + Math.ceil(interleaved.length / COLD_START_INTERVAL);
-          pos += COLD_START_INTERVAL
-        ) {
-          if (newUserIndex >= newUsers.length * 3) break;
-          const newUser = newUsers[newUserIndex % newUsers.length];
-          if (pos <= interleaved.length) {
-            interleaved.splice(pos, 0, newUser);
+      // Interleave new users into every 5th position, rotating the
+      // starting new user via newUserIndexRef so different new users
+      // surface across fetches/refreshes. Each new user appears at most
+      // once per fetch to avoid duplicate FlatList keys / repeated cards.
+      let interleaved: Freelancer[];
+      if (newUsers.length === 0) {
+        interleaved = ranked;
+      } else if (ranked.length === 0) {
+        // No established freelancers to interleave with — show new users as-is
+        interleaved = newUsers;
+        newUserIndexRef.current += newUsers.length;
+      } else {
+        interleaved = [];
+        let newUserIndex = newUserIndexRef.current;
+        let insertions = 0;
+        ranked.forEach((f, i) => {
+          interleaved.push(f);
+          if (
+            insertions < newUsers.length &&
+            (i + 1) % COLD_START_INTERVAL === 0
+          ) {
+            interleaved.push(newUsers[newUserIndex % newUsers.length]);
+            newUserIndex++;
+            insertions++;
           }
-          newUserIndex++;
-        }
+        });
         newUserIndexRef.current = newUserIndex;
       }
 
