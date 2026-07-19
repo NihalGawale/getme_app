@@ -25,6 +25,7 @@ import { FontFamily, FontSize, TextStyles } from "../../constants/Typography";
 import { Spacing, Radius } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
+import FeedbackButton from "../../components/ui/FeedbackButton";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Divider from "../../components/ui/Divider";
@@ -1077,6 +1078,7 @@ export default function ProfileScreen() {
         onIndexChange={setLightboxIndex}
         onClose={() => setLightboxVisible(false)}
       />
+      <FeedbackButton />
     </>
   );
 }

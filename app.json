@@ -15,10 +15,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "social.getme.app",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "GetMe needs access to your photos so you can upload portfolio images and a profile picture.",
-        "NSCameraUsageDescription": "GetMe needs camera access so you can take a profile photo directly in the app."
+        "NSCameraUsageDescription": "GetMe needs camera access so you can take a profile photo directly in the app.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,7 +27,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "social.getme.app"
+      "package": "social.getme.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",

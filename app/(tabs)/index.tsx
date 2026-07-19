@@ -22,6 +22,7 @@ import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
 import EmptyState from "../../components/ui/EmptyState";
 import CityPickerModal from "../../components/CityPickerModal";
+import FeedbackButton from "../../components/ui/FeedbackButton";
 import type { City } from "../../types/city";
 import { Feather } from "@expo/vector-icons";
 
@@ -537,6 +538,7 @@ export default function HomeScreen() {
         }}
         onClose={() => setShowCityModal(false)}
       />
+      <FeedbackButton />
     </SafeAreaView>
   );
 }

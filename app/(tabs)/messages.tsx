@@ -16,6 +16,7 @@ import { FontFamily, FontSize } from "../../constants/Typography";
 import { Spacing } from "../../constants/Spacing";
 import { Layout } from "../../constants/Layout";
 import Avatar from "../../components/ui/Avatar";
+import FeedbackButton from "../../components/ui/FeedbackButton";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import EmptyState from "../../components/ui/EmptyState";
 
@@ -242,6 +243,7 @@ export default function MessagesScreen() {
           </TouchableOpacity>
         )}
       />
+      <FeedbackButton />
     </SafeAreaView>
   );
 }
