@@ -19,9 +19,9 @@ import { FontFamily, FontSize } from '../../constants/Typography'
 import { Spacing, Radius } from '../../constants/Spacing'
 
 const RATING_OPTIONS: { rating: 1 | 2 | 3; emoji: string; label: string }[] = [
-  { rating: 1, emoji: '😞', label: 'Not great' },
-  { rating: 2, emoji: '😐', label: "It's okay" },
-  { rating: 3, emoji: '😊', label: 'Loving it' },
+  { rating: 1, emoji: '🙁', label: "It's okay"  },
+  { rating: 2, emoji: '🙂', label: "Good!" },
+  { rating: 3, emoji: '😍', label: 'Loving it' },
 ]
 
 export default function FeedbackButton() {
