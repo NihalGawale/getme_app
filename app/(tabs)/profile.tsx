@@ -12,9 +12,10 @@ import {
   Alert,
   Dimensions,
   Modal,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
@@ -220,6 +221,7 @@ export default function ProfileScreen() {
   const [cities, setCities] = useState<City[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [showCitySheet, setShowCitySheet] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [photoChanged, setPhotoChanged] = useState(false);
   const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null);
 
@@ -241,8 +243,8 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (user) fetchMyReviews();
-    }, [user]),
+      if (user?.id) fetchMyReviews();
+    }, [user?.id]),
   );
 
   const fetchProfileData = async () => {
@@ -344,6 +346,13 @@ export default function ProfileScreen() {
   const fullName =
     [firstName, lastName].filter(Boolean).join(" ") || profile?.name || "";
   const selectedCity = cities.find((c) => c.id === cityId) ?? null;
+  const filteredCities = useMemo(
+    () =>
+      cities.filter((city) =>
+        city.name.toLowerCase().includes(citySearch.toLowerCase()),
+      ),
+    [cities, citySearch],
+  );
   const skillObjects = selectedSkills
     .map((id) => skills.find((s) => s.id === id))
     .filter(Boolean) as Skill[];
@@ -964,47 +973,95 @@ export default function ProfileScreen() {
         )}
 
         {profile?.role === "client" ? clientContent : content}
-
-        {/* City bottom sheet (inline, no Modal) */}
-        {showCitySheet && (
-          <>
-            <TouchableOpacity
-              style={s.overlay}
-              activeOpacity={1}
-              onPress={() => setShowCitySheet(false)}
-            />
-            <View style={s.sheet}>
-              <View style={s.sheetHandle} />
-              <Text style={s.sheetTitle}>Select city</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {cities.map((city) => (
-                  <TouchableOpacity
-                    key={city.id}
-                    style={s.cityItem}
-                    onPress={() => {
-                      setCityId(city.id);
-                      setShowCitySheet(false);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        s.cityName,
-                        cityId === city.id && s.cityNameSelected,
-                      ]}
-                    >
-                      {city.name}
-                    </Text>
-                    {cityId === city.id && (
-                      <Feather name="check" size={14} color={Colors.green} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </>
-        )}
       </SafeAreaView>
+
+      <Modal
+        visible={showCitySheet}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowCitySheet(false);
+          setCitySearch("");
+        }}
+      >
+        <SafeAreaView style={s.cityModal}>
+          <View style={s.cityModalHeader}>
+            <Text style={s.cityModalTitle}>Select City</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowCitySheet(false);
+                setCitySearch("");
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather name="x" size={22} color={Colors.black} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={s.cityModalSearch}>
+            <Feather name="search" size={16} color={Colors.grey500} />
+            <TextInput
+              style={s.cityModalSearchInput}
+              value={citySearch}
+              onChangeText={setCitySearch}
+              placeholder="Search city..."
+              placeholderTextColor={Colors.grey300}
+              autoFocus
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {citySearch.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setCitySearch("")}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Feather name="x" size={16} color={Colors.grey500} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {filteredCities.length === 0 ? (
+            <View style={s.cityModalEmpty}>
+              <Text style={s.cityModalEmptyText}>
+                No cities found for "{citySearch}"
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredCities}
+              keyExtractor={(item) => item.id}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={s.cityModalDivider} />}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={s.cityModalItem}
+                  onPress={() => {
+                    setCityId(item.id);
+                    setShowCitySheet(false);
+                    setCitySearch("");
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      s.cityModalItemText,
+                      cityId === item.id && s.cityModalItemSelected,
+                    ]}
+                  >
+                    {item.name}
+                  </Text>
+                  {cityId === item.id && (
+                    <Feather name="check" size={16} color={Colors.green} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={showMyReviewsSheet}
@@ -1328,42 +1385,74 @@ const s = StyleSheet.create({
   },
 
   // City sheet
-  overlay: { flex: 1, backgroundColor: Colors.overlay },
-  sheet: {
+  cityModal: {
+    flex: 1,
     backgroundColor: Colors.white,
-    borderTopLeftRadius: Spacing.xl,
-    borderTopRightRadius: Spacing.xl,
-    padding: Layout.screenPadding,
-    maxHeight: "60%",
   },
-  sheetHandle: {
-    width: Spacing.xxxl,
-    height: 3,
-    backgroundColor: Colors.grey200,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: Spacing.md,
-  },
-  sheetTitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.base,
-    color: Colors.black,
-    marginBottom: Spacing.md,
-  },
-  cityItem: {
+  cityModalHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.grey100,
   },
-  cityName: {
+  cityModalTitle: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.lg,
+    color: Colors.black,
+  },
+  cityModalSearch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    margin: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+    backgroundColor: Colors.grey100,
+    borderRadius: Radius.md,
+  },
+  cityModalSearchInput: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.black,
+    height: "100%",
+  },
+  cityModalEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.xxxl,
+  },
+  cityModalEmptyText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.base,
+    color: Colors.grey500,
+    textAlign: "center",
+  },
+  cityModalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  cityModalItemText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.base,
     color: Colors.black,
   },
-  cityNameSelected: { fontFamily: FontFamily.medium },
+  cityModalItemSelected: {
+    fontFamily: FontFamily.medium,
+    color: Colors.green,
+  },
+  cityModalDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.grey100,
+    marginHorizontal: Spacing.lg,
+  },
   completionWrap: {
     marginHorizontal: Spacing.xl,
     marginTop: Spacing.xl,

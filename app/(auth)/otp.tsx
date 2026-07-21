@@ -69,6 +69,32 @@ export default function OTPScreen() {
 
     setLoading(true);
 
+    // Demo account bypass — routes to a pre-created account instead of real OTP verification
+    if (phone === "+919876543210" && otpCode === "123456") {
+      try {
+        // Establishes a real Supabase session so RLS policies pass correctly
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: 'demo@getme.social',
+          password: 'Demo#121'
+        })
+
+        if (signInError) {
+          setLoading(false)
+          Alert.alert('Error', signInError.message)
+          return
+        }
+
+        // Session is now established — fetch the user profile
+        await refreshProfile()
+        setLoading(false)
+        router.replace('/(tabs)/')
+      } catch (e) {
+        setLoading(false)
+        Alert.alert('Error', 'Something went wrong')
+      }
+      return
+    }
+
     const { data, error } = await supabase.auth.verifyOtp({
       phone,
       token: otpCode,
@@ -102,12 +128,7 @@ export default function OTPScreen() {
 
     if (existingUser) {
       // Check if user is trying to sign up with a different role
-      if (
-        role &&
-        existingUser.role &&
-        role !== existingUser.role &&
-        role !== "both"
-      ) {
+      if (role && existingUser.role && role !== existingUser.role) {
         setLoading(false);
         Alert.alert(
           "Account already exists",
